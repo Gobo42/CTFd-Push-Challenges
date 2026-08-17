@@ -1,0 +1,25 @@
+# Independent authoring tools. This archive does not contain the CTFd importer.
+@package push-challenges-tools
+@root push-challenges-tools
+
+README.md
+requirements-tools.txt
+authoring/__init__.py
+authoring/csv_input.py
+authoring/normalize.py
+authoring/preview.py
+authoring/workbook.py
+authoring/xlsx_input.py
+docs/csv-format.md
+docs/installation.md
+docs/operator-guide.md
+docs/workbook-authoring.md
+push_challenges_core/__init__.py
+push_challenges_core/errors.py
+push_challenges_core/graph.py
+push_challenges_core/manifest.py
+push_challenges_core/model.py
+push_challenges_core/tags.py
+tools/create_workbook.py
+tools/push-challenges-template.xlsx
+tools/validate_challenges.py

@@ -1,0 +1,3 @@
+Name,Description,Value,Category,State,Type,Tags,Next,Logic,Max Attempts,Attribution,Connection Info,Solution,Solution State,Flags,Hints
+Welcome,"Read the prompt, then submit.",100,Intro,Hidden,Standard,#beginner #web authentication,Second,Require Any Flag,0,,,Use the obvious value,Hidden,"[{""type"":""static"",""content"":""flag{welcome}"",""data"":""case_sensitive""}]","[{""title"":""Clue"",""content"":""Read it"",""cost"":5,""required_hints"":[]}]"
+Second,Follow-up challenge,200,Intro,Visible,Standard,#beginner,,Require Any Flag,0,,,,Hidden,[],[]
