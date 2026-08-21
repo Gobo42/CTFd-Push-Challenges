@@ -12,9 +12,16 @@ CTFd server, reviews a dry run, and adds `--apply` to commit it.
 python3 tools/validate_challenges.py challenges.xlsx \
   --output challenges.push.json
 
-ctfd-cli push-challenges import challenges.push.json
-ctfd-cli push-challenges import challenges.push.json --apply
+ctfd-cli push-challenges import /srv/ctfd-imports/challenges.push.json
+ctfd-cli push-challenges import /srv/ctfd-imports/challenges.push.json --apply
 ```
+
+`ctfd-cli` is an operator-owned launcher, not part of this plugin. The
+documented Debian example uses a transient systemd unit to run CTFd's own Flask
+executable as `ctfd:ctfd`, with the CTFd environment file and working
+directory. Transfer and install the validator's output at the server path
+before running these commands. See
+[Installation](docs/installation.md#ctfd-cli-launcher) before server imports.
 
 The first release supports fixed-value Standard challenges in individual or
 team CTFd installations. Dynamic challenge input is recognized but rejected.
@@ -37,6 +44,7 @@ Python package.
 - [Workbook authoring](docs/workbook-authoring.md)
 - [CSV format](docs/csv-format.md)
 - [Operator guide](docs/operator-guide.md)
+- [Troubleshooting](docs/troubleshooting.md)
 
 ## Safety model
 

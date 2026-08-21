@@ -13,6 +13,7 @@ authoring/xlsx_input.py
 docs/csv-format.md
 docs/installation.md
 docs/operator-guide.md
+docs/troubleshooting.md
 docs/workbook-authoring.md
 push_challenges_core/__init__.py
 push_challenges_core/errors.py

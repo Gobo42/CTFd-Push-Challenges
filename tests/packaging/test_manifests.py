@@ -13,6 +13,7 @@ SERVER_FILES = {
     "docs/csv-format.md",
     "docs/installation.md",
     "docs/operator-guide.md",
+    "docs/troubleshooting.md",
     "docs/workbook-authoring.md",
     "push_challenges_core/__init__.py",
     "push_challenges_core/errors.py",
@@ -33,6 +34,7 @@ TOOLS_FILES = {
     "docs/csv-format.md",
     "docs/installation.md",
     "docs/operator-guide.md",
+    "docs/troubleshooting.md",
     "docs/workbook-authoring.md",
     "push_challenges_core/__init__.py",
     "push_challenges_core/errors.py",
@@ -61,7 +63,7 @@ def archive_markdown_links(path, member):
     with tarfile.open(path, "r:gz") as archive:
         content = archive.extractfile(member).read().decode("utf-8")
     return {
-        target
+        target.split("#", 1)[0]
         for target in re.findall(r"\[[^]]+\]\(([^)]+)\)", content)
         if not target.startswith(("http://", "https://", "#"))
     }

@@ -2,10 +2,13 @@
 
 ## Workflow
 
-First run the default dry-run command using the installation's normal CTFd
-Flask launcher:
+Stage the validated manifest where the `ctfd` service account can read it, as
+described in [Installation](installation.md#filesystem-permissions). Record its
+digest, then run the default dry-run through the established `ctfd-cli`
+launcher:
 
 ```bash
+sha256sum /srv/ctfd-imports/challenges.push.json
 ctfd-cli push-challenges import /srv/ctfd-imports/challenges.push.json
 ```
 
@@ -23,14 +26,28 @@ Review:
 - `Next` targets;
 - retained authoring warnings.
 
-Apply the same immutable input by adding `--apply`:
+The launcher propagates the importer's exit status. A nonzero result means the
+dry-run failed; correct the reported problem and repeat it. Do not apply a
+manifest whose dry-run failed.
+
+After review, confirm that the digest has not changed and apply the exact same
+manifest by adding `--apply`:
 
 ```bash
+sha256sum /srv/ctfd-imports/challenges.push.json
 ctfd-cli push-challenges import \
   /srv/ctfd-imports/challenges.push.json --apply
 ```
 
-Commands are non-interactive and can be logged or redirected.
+The two digest outputs must match. If they differ, stop and dry-run the changed
+file before applying it. The importer is non-interactive and can be logged or
+redirected; the example launcher allocates a terminal for the transient
+systemd unit and prints its unit name and invocation ID.
+
+An apply success returns zero. Verify the affected challenges in CTFd after
+the command completes. A nonzero result means the transaction did not complete
+unless the output explicitly identifies a post-commit cache warning. See
+[Troubleshooting](troubleshooting.md).
 
 ## Matching and replacement rules
 
