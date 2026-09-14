@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 from typing import Any
@@ -563,51 +564,14 @@ def load_manifest(path: Path) -> Manifest:
     return manifest
 
 
-def _solution_data(solution: SolutionSpec) -> dict[str, object]:
-    return {
-        "action": solution.action,
-        "content": solution.content,
-        "state": solution.state,
-    }
-
-
-def _challenge_data(challenge: ChallengeSpec) -> dict[str, object]:
-    return {
-        "name": challenge.name,
-        "description": challenge.description,
-        "value": challenge.value,
-        "category": challenge.category,
-        "state": challenge.state,
-        "type": challenge.type,
-        "logic": challenge.logic,
-        "max_attempts": challenge.max_attempts,
-        "attribution": challenge.attribution,
-        "connection_info": challenge.connection_info,
-        "tags": list(challenge.tags),
-        "next": challenge.next,
-        "solution": _solution_data(challenge.solution),
-        "flags": [
-            {"type": flag.type, "content": flag.content, "data": flag.data}
-            for flag in challenge.flags
-        ],
-        "hints": [
-            {
-                "title": hint.title,
-                "content": hint.content,
-                "cost": hint.cost,
-                "required_hints": list(hint.required_hints),
-            }
-            for hint in challenge.hints
-        ],
-    }
-
-
 def dump_manifest(manifest: Manifest, path: Path) -> None:
     data = {
         "format": manifest.format,
         "version": manifest.version,
         "warnings": [warning.to_data() for warning in manifest.warnings],
-        "challenges": [_challenge_data(challenge) for challenge in manifest.challenges],
+        "challenges": [
+            dataclasses.asdict(challenge) for challenge in manifest.challenges
+        ],
     }
     text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
     path.write_text(text, encoding="utf-8")

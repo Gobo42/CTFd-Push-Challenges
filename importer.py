@@ -205,16 +205,9 @@ def build_plan(manifest: Manifest) -> ImportPlan:
             if action.existing_id is not None
             else []
         )
-        hints_by_title = _group_by_name(
-            [
-                type(
-                    "HintName",
-                    (),
-                    {"name": hint.title, "id": hint.id, "hint": hint},
-                )()
-                for hint in existing_hints
-            ]
-        )
+        hints_by_title: defaultdict[str, list[object]] = defaultdict(list)
+        for hint in existing_hints:
+            hints_by_title[hint.title].append(hint)
         relevant_titles = {
             title
             for hint in action.spec.hints
