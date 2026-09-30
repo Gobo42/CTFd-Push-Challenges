@@ -172,9 +172,7 @@ def _solution_data(
     return {"action": "upsert", "content": content, "state": state}
 
 
-def _flags_data(
-    row: AuthoringRow, diagnostics: list[Diagnostic]
-) -> list[object]:
+def _flags_data(row: AuthoringRow, diagnostics: list[Diagnostic]) -> list[object]:
     values = _json_array(row, "Flags", diagnostics)
     result: list[object] = []
     for index, value in enumerate(values):
@@ -188,6 +186,8 @@ def _flags_data(
                 )
             )
             continue
+        if "content" in value:
+            value = {**value, "content": _text(value["content"])}
         result.append(value)
     return result
 
@@ -289,18 +289,14 @@ def _challenge_data(
 
 def normalize(document: AuthoringDocument) -> ValidationResult:
     diagnostics = list(document.diagnostics)
-    challenges = [
-        _challenge_data(row, diagnostics) for row in document.rows
-    ]
+    challenges = [_challenge_data(row, diagnostics) for row in document.rows]
     names = {
         challenge["name"]
         for challenge in challenges
         if isinstance(challenge["name"], str) and challenge["name"]
     }
     local_edges = {
-        challenge["name"]: (
-            challenge["next"] if challenge["next"] in names else None
-        )
+        challenge["name"]: (challenge["next"] if challenge["next"] in names else None)
         for challenge in challenges
         if challenge["name"] in names
     }

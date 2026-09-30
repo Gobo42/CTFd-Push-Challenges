@@ -48,6 +48,28 @@ def test_xlsx_round_trip_joins_related_sheets(tmp_path):
     assert authored.next == "Part 2"
 
 
+def test_xlsx_numeric_content_cells_are_converted_to_text(tmp_path):
+    path = tmp_path / "numeric-content.xlsx"
+    create_workbook(path, author_rows=5)
+    workbook = load_workbook(path)
+    workbook["Challenges"].append(
+        ["Numbers", 101, 100, "Web", "Hidden", "Standard", "", "", "", 0, "", ""]
+    )
+    workbook["Flags"].append(["Numbers", "Static", 12345, "Case Sensitive"])
+    workbook["Solutions"].append(["Numbers", 42, "Hidden"])
+    workbook["Hints"].append(["Numbers", "Numeric", 3.14, 0, ""])
+    workbook.save(path)
+
+    result = normalize(load_xlsx(path))
+
+    assert result.manifest is not None
+    challenge = result.manifest.challenges[0]
+    assert challenge.description == "101"
+    assert challenge.flags[0].content == "12345"
+    assert challenge.solution.content == "42"
+    assert challenge.hints[0].content == "3.14"
+
+
 def test_xlsx_orphan_hint_is_omitted_with_warning(tmp_path):
     path = tmp_path / "orphan-hint.xlsx"
     create_workbook(path, author_rows=5)

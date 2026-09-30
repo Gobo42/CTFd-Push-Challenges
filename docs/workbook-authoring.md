@@ -46,6 +46,13 @@ Enter one challenge per row.
 - `Connection Info`: optional connection instructions. Blank clears the value
   on overwrite.
 
+When Excel stores a value entered in a text or content cell as a number, the
+validator converts it to text before creating the manifest. For example, a
+numeric flag value of `12345` becomes the string `"12345"`. Challenge values,
+maximum attempts, and hint costs remain numeric. Excel discards leading zeros
+from numeric cells, so format values such as `00123` as Text when those zeros
+must be preserved.
+
 Every `#` starts a new tag. A tag continues until the next `#`, so
 `#web authentication` is one tag containing a space. Text before the first
 `#`, an empty tag, and duplicate tags are errors.
