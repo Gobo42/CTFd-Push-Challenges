@@ -12,8 +12,7 @@ def render_preview(result: ValidationResult) -> str:
     for diagnostic in result.diagnostics:
         level = "ERROR" if diagnostic.blocking else "WARNING"
         lines.append(
-            f"{level} [{diagnostic.code}] {diagnostic.source}: "
-            f"{diagnostic.message}"
+            f"{level} [{diagnostic.code}] {diagnostic.source}: {diagnostic.message}"
         )
     if result.manifest is None:
         if not lines:
@@ -26,8 +25,7 @@ def render_preview(result: ValidationResult) -> str:
         lines.extend(
             [
                 f"Challenge {index}: {challenge.name}",
-                f"  Type / State: {_title(challenge.type)} / "
-                f"{_title(challenge.state)}",
+                f"  Type / State: {_title(challenge.type)} / {_title(challenge.state)}",
                 f"  Category / Value: {challenge.category} / {challenge.value}",
                 f"  Logic / Max Attempts: {_title(challenge.logic)} / "
                 f"{challenge.max_attempts}",
@@ -47,21 +45,27 @@ def render_preview(result: ValidationResult) -> str:
         if challenge.flags:
             for flag in challenge.flags:
                 lines.append(
-                    f"    {_title(flag.type)} / {_title(flag.data)}: "
-                    f"{flag.content}"
+                    f"    {_title(flag.type)} / {_title(flag.data)}: {flag.content}"
                 )
         else:
             lines.append("    (none)")
         lines.append("  Hints:")
         if challenge.hints:
             for hint_index, hint in enumerate(challenge.hints, start=1):
-                lines.append(
-                    f"    Hint {hint_index}: {hint.title} (cost {hint.cost})"
-                )
+                lines.append(f"    Hint {hint_index}: {hint.title} (cost {hint.cost})")
                 required = ", ".join(hint.required_hints) or "(none)"
                 lines.append(f"      Requires: {required}")
                 lines.append(f"      Content: {hint.content}")
         else:
             lines.append("    (none)")
+        if challenge.scoring is not None:
+            lines.append(
+                f"  Dynamic scoring: {challenge.scoring.function}; "
+                f"initial {challenge.value}; "
+                f"minimum {challenge.scoring.minimum}; decay {challenge.scoring.decay}"
+            )
+        lines.append(f"  Bonus Mode: {challenge.bonus.mode}")
+        for tier in challenge.bonus.tiers:
+            lines.append(f"    Placements {tier.start}-{tier.end}: {tier.amount}")
         lines.append(f"  Description: {challenge.description or '(blank)'}")
     return "\n".join(lines) + "\n"

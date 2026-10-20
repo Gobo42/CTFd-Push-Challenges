@@ -1,11 +1,11 @@
 from pathlib import Path
 
-from authoring.csv_input import CSV_HEADERS, load_csv
+from authoring.csv_input import CSV_HEADERS, LEGACY_CSV_HEADERS, load_csv
 
 
 def test_csv_accepts_excel_bom_crlf_and_multiline_description(tmp_path):
     path = tmp_path / "excel.csv"
-    header = ",".join(CSV_HEADERS)
+    header = ",".join(LEGACY_CSV_HEADERS)
     content = (
         "\ufeff"
         + header

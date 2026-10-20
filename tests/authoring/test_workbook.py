@@ -5,7 +5,7 @@ from openpyxl import load_workbook
 
 from authoring.workbook import create_workbook
 
-AUTHORING_SHEETS = ("Challenges", "Flags", "Solutions", "Hints")
+AUTHORING_SHEETS = ("Challenges", "Flags", "Solutions", "Hints", "Bonus Tiers")
 
 
 def assert_table_filters_are_compatible(workbook):
@@ -30,6 +30,7 @@ def test_workbook_has_author_friendly_sheets_and_defaults(tmp_path):
         "Flags",
         "Solutions",
         "Hints",
+        "Bonus Tiers",
         "Lists",
     ]
     assert workbook["Lists"].sheet_state == "hidden"
@@ -59,6 +60,8 @@ def test_workbook_dropdowns_use_fixed_lists_and_challenge_names(tmp_path):
     assert any(item.formula1 == "=ChallengeTypes" for item in challenge_validations)
     assert workbook["Lists"]["B3"].value == "Dynamic"
     assert any(item.formula1 == "=FlagLogic" for item in challenge_validations)
+    assert any(item.formula1 == "=ScoringFunctions" for item in challenge_validations)
+    assert any(item.formula1 == "=BonusModes" for item in challenge_validations)
     assert any(item.formula1 == "=ChallengeNames" for item in flag_validations)
     assert any(item.formula1 == "=ChallengeNames" for item in solution_validations)
     assert any(item.formula1 == "=ChallengeNames" for item in hint_validations)

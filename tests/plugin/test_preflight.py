@@ -66,9 +66,7 @@ def test_projected_cycle_crossing_database_aborts(app):
     existing = persisted_challenge("Existing", next_id=imported.id)
     importer = importer_module()
 
-    with pytest.raises(
-        importer.ImportPreflightError, match="A -> Existing -> A"
-    ):
+    with pytest.raises(importer.ImportPreflightError, match="A -> Existing -> A"):
         importer.build_plan(
             canonical_manifest(challenge_data("A", next_name="Existing"))
         )
@@ -88,18 +86,14 @@ def test_duplicate_relevant_database_name_aborts_with_ids(app):
     assert str(second.id) in str(caught.value)
 
 
-@pytest.mark.parametrize(
-    ("challenge_type", "function"),
-    [("dynamic", "static"), ("standard", "decay")],
-)
-def test_unsupported_overwrite_target_aborts(app, challenge_type, function):
-    challenge = persisted_challenge("Example", challenge_type=challenge_type)
-    challenge.function = function
+def test_unsupported_function_aborts(app):
+    challenge = persisted_challenge("Example")
+    challenge.function = "decay"
     db.session.commit()
     importer = importer_module()
 
     with pytest.raises(
-        importer.ImportPreflightError, match="fixed-value standard"
+        importer.ImportPreflightError, match="unsupported scoring function"
     ):
         importer.build_plan(canonical_manifest(challenge_data("Example")))
 

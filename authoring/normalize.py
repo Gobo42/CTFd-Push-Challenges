@@ -268,13 +268,56 @@ def _challenge_data(
         )
         tags = ()
     next_name = _text(row.values.get("Next")).strip() or None
+    challenge_type = _enum_value(row, "Type", TYPE_VALUES, diagnostics)
+    scoring = None
+    if challenge_type == "dynamic":
+        scoring = {
+            "function": _text(row.values.get("Scoring Function")).strip().lower(),
+            "minimum": _integer_value(row, "Minimum Value", diagnostics),
+            "decay": _integer_value(row, "Decay", diagnostics),
+        }
+    elif any(
+        _text(row.values.get(key)).strip()
+        for key in ("Scoring Function", "Minimum Value", "Decay")
+    ):
+        diagnostics.append(
+            Diagnostic(
+                "invalid_scoring",
+                "Standard challenges must leave dynamic scoring settings blank",
+                row.source,
+                True,
+            )
+        )
+    mode = _text(row.values.get("Bonus Mode")).strip().lower() or "preserve"
+    bonus_tiers = []
+    for index, tier in enumerate(_json_array(row, "Bonus Tiers", diagnostics)):
+        if not isinstance(tier, dict) or set(tier) != {"start", "end", "amount"}:
+            diagnostics.append(
+                Diagnostic(
+                    "invalid_bonus",
+                    "Tier requires start, end, amount",
+                    _source(row, f"Bonus Tiers[{index}]"),
+                    True,
+                )
+            )
+            continue
+        tier_row = AuthoringRow(_source(row, f"Bonus Tiers[{index}]"), tier)
+        bonus_tiers.append(
+            {
+                "start": _integer_value(tier_row, "start", diagnostics),
+                "end": _integer_value(tier_row, "end", diagnostics),
+                "amount": _text(tier["amount"]),
+            }
+        )
     return {
         "name": _text(row.values.get("Name")),
         "description": _text(row.values.get("Description")),
         "value": _integer_value(row, "Value", diagnostics),
         "category": _text(row.values.get("Category")),
         "state": _enum_value(row, "State", STATE_VALUES, diagnostics),
-        "type": _enum_value(row, "Type", TYPE_VALUES, diagnostics),
+        "type": challenge_type,
+        "scoring": scoring,
+        "bonus": {"mode": mode, "tiers": bonus_tiers},
         "logic": _enum_value(row, "Logic", LOGIC_VALUES, diagnostics),
         "max_attempts": _integer_value(row, "Max Attempts", diagnostics),
         "attribution": _text(row.values.get("Attribution")),
@@ -313,7 +356,7 @@ def normalize(document: AuthoringDocument) -> ValidationResult:
 
     data = {
         "format": "push-challenges",
-        "version": 1,
+        "version": 2,
         "warnings": [],
         "challenges": challenges,
     }

@@ -5,14 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from openpyxl import Workbook
-from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
-CHALLENGE_HEADERS = (
+LEGACY_CHALLENGE_HEADERS = (
     "Name",
     "Description",
     "Value",
@@ -26,13 +25,19 @@ CHALLENGE_HEADERS = (
     "Attribution",
     "Connection Info",
 )
+CHALLENGE_HEADERS = LEGACY_CHALLENGE_HEADERS + (
+    "Scoring Function",
+    "Minimum Value",
+    "Decay",
+    "Bonus Mode",
+)
+BONUS_HEADERS = ("Challenge", "Start Placement", "End Placement", "Amount")
 FLAG_HEADERS = ("Challenge", "Flag Type", "Content", "Matching")
 SOLUTION_HEADERS = ("Challenge", "Content", "State")
 HINT_HEADERS = ("Challenge", "Title", "Hint", "Cost", "Required Hints")
 
 HEADER_FILL = PatternFill("solid", fgColor="1F4E78")
 HEADER_FONT = Font(color="FFFFFF", bold=True)
-WARNING_FILL = PatternFill("solid", fgColor="FFF2CC")
 
 
 def _style_sheet(sheet, widths: tuple[int, ...]) -> None:
@@ -98,6 +103,8 @@ def _create_lists(workbook: Workbook) -> None:
         "D": ("Flag Types", "Static", "Regex"),
         "E": ("Flag Matching", "Case Sensitive", "Case Insensitive"),
         "F": ("Solution States", "Hidden", "Visible", "Solved"),
+        "G": ("Scoring Functions", "Linear", "Logarithmic"),
+        "H": ("Bonus Modes", "Disabled", "Absolute", "Percentage"),
     }
     names = {
         "A": "ChallengeStates",
@@ -106,6 +113,8 @@ def _create_lists(workbook: Workbook) -> None:
         "D": "FlagTypes",
         "E": "FlagMatching",
         "F": "SolutionStates",
+        "G": "ScoringFunctions",
+        "H": "BonusModes",
     }
     for column, values in columns.items():
         for row, value in enumerate(values, start=1):
@@ -118,8 +127,7 @@ def _create_lists(workbook: Workbook) -> None:
     _add_defined_name(
         workbook,
         "ChallengeNames",
-        "OFFSET('Challenges'!$A$2,0,0,"
-        "MAX(1,COUNTA('Challenges'!$A:$A)-1),1)",
+        "OFFSET('Challenges'!$A$2,0,0,MAX(1,COUNTA('Challenges'!$A:$A)-1),1)",
     )
     sheet.sheet_state = "hidden"
 
@@ -151,9 +159,27 @@ def _create_instructions(workbook: Workbook) -> None:
             "for that challenge. Invalid requirements are ignored with a warning.",
         ),
         (
-            "Limitations",
-            "Standard challenges are supported. Dynamic is reserved for future use "
-            "and currently fails validation. Files remain manual.",
+            "Dynamic scoring",
+            "Value is initial points. Select Linear or Logarithmic, enter Minimum "
+            "Value and positive Decay. Standard rows leave these settings blank.",
+        ),
+        (
+            "Bonus tiers",
+            "Choose Absolute or Percentage in Bonus Mode, then add contiguous "
+            "placement ranges starting at 1 on Bonus Tiers. Percentage truncates "
+            "to 2 decimals; absolute uses whole points. Zero is allowed.",
+        ),
+        (
+            "Preserve/disable",
+            "Blank Bonus Mode preserves existing settings. Disabled preserves "
+            "tiers and history but stops future awards. Both leave Bonus Tiers "
+            "empty. Bonus changes require Monthly Game on the server.",
+        ),
+        (
+            "Import skips",
+            "Existing Standard/Dynamic type mismatches skip only that challenge. "
+            "Review MANUAL ACTION REQUIRED at the end of every import. Change "
+            "types manually in CTFd and rerun. Files remain manual.",
         ),
     )
     for row, values in enumerate(lines, start=1):
@@ -181,7 +207,7 @@ def create_workbook(path: Path, author_rows: int = 500) -> None:
         challenges.cell(row, 10, 0)
     _style_sheet(
         challenges,
-        (28, 70, 12, 20, 14, 14, 38, 28, 22, 16, 28, 42),
+        (28, 70, 12, 20, 14, 14, 38, 28, 22, 16, 28, 42, 22, 18, 14, 18),
     )
     _list_validation(challenges, "=ChallengeStates", f"E2:E{author_rows + 1}")
     _list_validation(challenges, "=ChallengeTypes", f"F2:F{author_rows + 1}")
@@ -189,10 +215,14 @@ def create_workbook(path: Path, author_rows: int = 500) -> None:
     _whole_number_validation(
         challenges, f"J2:J{author_rows + 1}", minimum=0, allow_blank=False
     )
-    challenges.conditional_formatting.add(
-        f"F2:F{author_rows + 1}",
-        FormulaRule(formula=['F2="Dynamic"'], fill=WARNING_FILL),
+    _list_validation(challenges, "=ScoringFunctions", f"M2:M{author_rows + 1}")
+    _whole_number_validation(
+        challenges, f"N2:N{author_rows + 1}", minimum=0, allow_blank=True
     )
+    _whole_number_validation(
+        challenges, f"O2:O{author_rows + 1}", minimum=1, allow_blank=True
+    )
+    _list_validation(challenges, "=BonusModes", f"P2:P{author_rows + 1}")
     _table(challenges, "ChallengesTable", author_rows + 1, len(CHALLENGE_HEADERS))
 
     flags = workbook.create_sheet("Flags")
@@ -224,6 +254,24 @@ def create_workbook(path: Path, author_rows: int = 500) -> None:
         hints, f"D2:D{author_rows + 1}", minimum=0, allow_blank=False
     )
     _table(hints, "HintsTable", author_rows + 1, len(HINT_HEADERS))
+
+    bonuses = workbook.create_sheet("Bonus Tiers")
+    bonuses.append(BONUS_HEADERS)
+    for _ in range(author_rows):
+        bonuses.append((None,) * len(BONUS_HEADERS))
+    _style_sheet(bonuses, (28, 20, 20, 20))
+    _list_validation(bonuses, "=ChallengeNames", f"A2:A{author_rows + 1}")
+    _whole_number_validation(
+        bonuses, f"B2:C{author_rows + 1}", minimum=1, allow_blank=False
+    )
+    amount_validation = DataValidation(
+        type="decimal", operator="greaterThanOrEqual", formula1="0", allow_blank=False
+    )
+    amount_validation.showErrorMessage = True
+    amount_validation.error = "Enter a nonnegative number."
+    bonuses.add_data_validation(amount_validation)
+    amount_validation.add(f"D2:D{author_rows + 1}")
+    _table(bonuses, "BonusTiersTable", author_rows + 1, len(BONUS_HEADERS))
 
     _create_lists(workbook)
     workbook.save(path)

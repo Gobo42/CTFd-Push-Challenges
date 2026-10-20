@@ -149,5 +149,5 @@ def test_dynamic_and_malformed_nested_json_are_blocking(tmp_path):
 
     assert result.manifest is None
     codes = {item.code for item in result.diagnostics}
-    assert "unsupported_challenge_type" in codes
+    assert "invalid_value" in codes
     assert "invalid_flags_json" in codes

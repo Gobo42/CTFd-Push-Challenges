@@ -5,10 +5,12 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Literal
 
 from CTFd.cache import clear_challenges, clear_standings
 from CTFd.models import Challenges, Flags, Hints, Solutions, Tags, db
+from flask import current_app
 
 from .push_challenges_core.graph import find_cycle
 from .push_challenges_core.model import ChallengeSpec, HintSpec, Manifest
@@ -39,12 +41,21 @@ class HintAction:
 
 
 @dataclass(frozen=True)
+class SkippedChallenge:
+    name: str
+    existing_id: int
+    existing_type: str
+    requested_type: str
+
+
+@dataclass(frozen=True)
 class ImportPlan:
     manifest: Manifest
     challenges: tuple[ChallengeAction, ...]
     hints: tuple[HintAction, ...]
     projected_next: Mapping[str, str | None]
     preserved_hint_counts: Mapping[str, int]
+    skipped: tuple[SkippedChallenge, ...]
 
 
 @dataclass(frozen=True)
@@ -77,6 +88,8 @@ def _challenge_changes(challenge, spec: ChallengeSpec) -> tuple[str, ...]:
             "solution",
             "hints",
             "next",
+            "scoring",
+            "bonus",
         )
     scalar_fields = (
         "description",
@@ -99,7 +112,56 @@ def _challenge_changes(challenge, spec: ChallengeSpec) -> tuple[str, ...]:
     if spec.hints:
         changes.append("hints")
     changes.append("next")
+    if spec.scoring is not None:
+        changes.append("scoring")
+    if spec.bonus.mode != "preserve":
+        changes.append("bonus")
     return tuple(changes)
+
+
+def _dynamic_support():
+    try:
+        from CTFd.plugins.dynamic_challenges import DynamicChallenge
+        from CTFd.plugins.dynamic_challenges.decay import DECAY_FUNCTIONS
+    except ImportError as error:
+        raise ImportPreflightError(
+            "Dynamic challenges require CTFd's native dynamic_challenges plugin"
+        ) from error
+    return DynamicChallenge, DECAY_FUNCTIONS
+
+
+def _check_function(challenge) -> None:
+    supported = {"static"} if challenge.type == "standard" else _dynamic_support()[1]
+    if challenge.function not in supported:
+        raise ImportPreflightError(
+            f"{challenge.name!r} has unsupported scoring function "
+            f"{challenge.function!r}"
+        )
+
+
+def _bonus_service():
+    service = current_app.extensions.get("monthly_game_bonuses")
+    if service is None or not all(
+        callable(getattr(service, name, None))
+        for name in (
+            "TierInput",
+            "validate_tiers",
+            "save_bonus_program",
+            "disable_bonus_program",
+        )
+    ):
+        raise ImportPreflightError(
+            "Bonus changes require a compatible Monthly Game plugin; "
+            "install or update it"
+        )
+    return service
+
+
+def _bonus_rows(service, bonus):
+    return [
+        service.TierInput(tier.start, tier.end, Decimal(tier.amount))
+        for tier in bonus.tiers
+    ]
 
 
 def _format_conflicts(kind: str, name: str, rows: list[object]) -> str:
@@ -112,27 +174,36 @@ def build_plan(manifest: Manifest) -> ImportPlan:
     by_id = {challenge.id: challenge for challenge in existing}
     by_name = _group_by_name(existing)
     imported_names = {spec.name for spec in manifest.challenges}
-    target_names = {
-        spec.next for spec in manifest.challenges if spec.next is not None
-    }
+    target_names = {spec.next for spec in manifest.challenges if spec.next is not None}
     for name in sorted(imported_names | target_names):
         matches = by_name.get(name, [])
         if len(matches) > 1:
-            raise ImportPreflightError(
-                _format_conflicts("challenge", name, matches)
-            )
+            raise ImportPreflightError(_format_conflicts("challenge", name, matches))
 
     actions: list[ChallengeAction] = []
-    action_by_name: dict[str, ChallengeAction] = {}
+    skipped: list[SkippedChallenge] = []
     for spec in manifest.challenges:
         matches = by_name.get(spec.name, [])
         challenge = matches[0] if matches else None
-        if challenge is not None and (
-            challenge.type != "standard" or challenge.function != "static"
-        ):
+        if challenge is not None and challenge.type not in {"standard", "dynamic"}:
             raise ImportPreflightError(
-                f"{spec.name!r} is not a fixed-value standard challenge"
+                f"{spec.name!r} has unsupported challenge type {challenge.type!r}"
             )
+        if challenge is not None and challenge.type != spec.type:
+            skipped.append(
+                SkippedChallenge(spec.name, challenge.id, challenge.type, spec.type)
+            )
+            continue
+        if spec.type == "dynamic":
+            _dynamic_support()
+        if challenge is not None:
+            _check_function(challenge)
+        if spec.bonus.mode != "preserve":
+            service = _bonus_service()
+            if spec.bonus.mode != "disabled":
+                service.validate_tiers(
+                    spec.bonus.mode, _bonus_rows(service, spec.bonus)
+                )
         action = ChallengeAction(
             spec=spec,
             existing_id=challenge.id if challenge is not None else None,
@@ -140,7 +211,6 @@ def build_plan(manifest: Manifest) -> ImportPlan:
             changes=_challenge_changes(challenge, spec),
         )
         actions.append(action)
-        action_by_name[spec.name] = action
 
     node_for_database_id = {
         challenge.id: f"db:{challenge.id}" for challenge in existing
@@ -154,14 +224,10 @@ def build_plan(manifest: Manifest) -> ImportPlan:
         for action in actions
     }
     labels = {
-        node_for_database_id[challenge.id]: challenge.name
-        for challenge in existing
+        node_for_database_id[challenge.id]: challenge.name for challenge in existing
     }
     labels.update(
-        {
-            node_for_import_name[action.spec.name]: action.spec.name
-            for action in actions
-        }
+        {node_for_import_name[action.spec.name]: action.spec.name for action in actions}
     )
     graph: dict[str, str | None] = {}
     for challenge in existing:
@@ -225,9 +291,7 @@ def build_plan(manifest: Manifest) -> ImportPlan:
         projected_titles = set(hints_by_title) | imported_titles
         for hint in action.spec.hints:
             unknown = [
-                title
-                for title in hint.required_hints
-                if title not in projected_titles
+                title for title in hint.required_hints if title not in projected_titles
             ]
             if unknown:
                 raise ImportPreflightError(
@@ -254,17 +318,25 @@ def build_plan(manifest: Manifest) -> ImportPlan:
         hints=tuple(hint_actions),
         projected_next=projected_next,
         preserved_hint_counts=preserved_hint_counts,
+        skipped=tuple(skipped),
     )
 
 
 def render_plan(plan: ImportPlan) -> str:
     lines: list[str] = []
     for warning in plan.manifest.warnings:
-        lines.append(
-            f"WARNING [{warning.code}] {warning.source}: {warning.message}"
-        )
+        lines.append(f"WARNING [{warning.code}] {warning.source}: {warning.message}")
     for action in plan.challenges:
         lines.append(f"{action.mode.upper()}: {action.spec.name}")
+        if action.spec.scoring is not None:
+            scoring = action.spec.scoring
+            lines.append(
+                f"  Dynamic: initial={action.spec.value}; minimum={scoring.minimum}; "
+                f"decay={scoring.decay}; function={scoring.function}"
+            )
+        lines.append(f"  Bonus: {action.spec.bonus.mode}")
+        for tier in action.spec.bonus.tiers:
+            lines.append(f"    Placements {tier.start}-{tier.end}: {tier.amount}")
         lines.append("  Fields: " + ", ".join(action.changes))
         lines.append(
             f"  Replace tags / flags: {len(action.spec.tags)} / "
@@ -286,15 +358,31 @@ def render_plan(plan: ImportPlan) -> str:
         for hint in challenge_hints:
             required = ", ".join(hint.spec.required_hints) or "(none)"
             lines.append(
-                f"    {hint.mode.upper()}: {hint.spec.title}; "
-                f"requires: {required}"
+                f"    {hint.mode.upper()}: {hint.spec.title}; requires: {required}"
             )
     return "\n".join(lines) + "\n"
 
 
-def _call_stage(
-    stage_hook: Callable[[str], None] | None, stage: str
-) -> None:
+def render_summary(plan: ImportPlan) -> str:
+    creates = sum(action.mode == "create" for action in plan.challenges)
+    lines = [
+        f"SUMMARY: create: {creates}; overwrite: {len(plan.challenges) - creates}; "
+        f"skipped: {len(plan.skipped)}"
+    ]
+    if plan.skipped:
+        lines.append("MANUAL ACTION REQUIRED: these challenges were NOT imported:")
+        lines.extend(
+            f"  {item.name!r}: {item.existing_type} -> {item.requested_type}"
+            for item in plan.skipped
+        )
+        lines.append(
+            "Change their types manually in CTFd, then rerun the import. "
+            "Skipped challenges and all their existing data were left unchanged."
+        )
+    return "\n".join(lines)
+
+
+def _call_stage(stage_hook: Callable[[str], None] | None, stage: str) -> None:
     if stage_hook is not None:
         stage_hook(stage)
 
@@ -315,19 +403,24 @@ def _recheck_plan(plan: ImportPlan) -> None:
             raise ImportPreflightError(
                 f"{action.spec.name!r} changed after preflight; current IDs: {ids}"
             )
-        if matches[0].type != "standard" or matches[0].function != "static":
+        if matches[0].type != action.spec.type:
             raise ImportPreflightError(
-                f"{action.spec.name!r} is no longer a fixed-value "
-                "standard challenge"
+                f"{action.spec.name!r} changed type after preflight"
             )
+        _check_function(matches[0])
+    for skipped in plan.skipped:
+        matches = by_name.get(skipped.name, [])
+        if len(matches) != 1 or (matches[0].id, matches[0].type) != (
+            skipped.existing_id,
+            skipped.existing_type,
+        ):
+            raise ImportPreflightError(f"{skipped.name!r} changed after preflight")
     for action in plan.hints:
         if action.existing_id is None:
             continue
         hint = Hints.query.get(action.existing_id)
         challenge_action = next(
-            item
-            for item in plan.challenges
-            if item.spec.name == action.challenge_name
+            item for item in plan.challenges if item.spec.name == action.challenge_name
         )
         if (
             hint is None
@@ -349,11 +442,15 @@ def apply_plan(
         challenge_rows: dict[str, Challenges] = {}
         for action in plan.challenges:
             if action.existing_id is None:
-                challenge = Challenges(
-                    name=action.spec.name,
-                    type="standard",
-                    function="static",
-                )
+                if action.spec.type == "dynamic":
+                    model, _ = _dynamic_support()
+                    challenge = model(
+                        name=action.spec.name, type="dynamic", initial=action.spec.value
+                    )
+                else:
+                    challenge = Challenges(
+                        name=action.spec.name, type="standard", function="static"
+                    )
                 db.session.add(challenge)
             else:
                 challenge = Challenges.query.get(action.existing_id)
@@ -367,15 +464,39 @@ def apply_plan(
             challenge.value = spec.value
             challenge.category = spec.category
             challenge.state = spec.state
-            challenge.type = "standard"
-            challenge.function = "static"
+            if spec.scoring is not None:
+                challenge.initial = spec.value
+                challenge.minimum = spec.scoring.minimum
+                challenge.decay = spec.scoring.decay
+                challenge.function = spec.scoring.function
+            else:
+                challenge.function = "static"
             challenge.logic = spec.logic if spec.flags else "any"
             challenge.max_attempts = spec.max_attempts
             challenge.attribution = spec.attribution
             challenge.connection_info = spec.connection_info
             challenge_rows[spec.name] = challenge
         db.session.flush()
+        for action in plan.challenges:
+            challenge = challenge_rows[action.spec.name]
+            if action.spec.scoring is not None:
+                _, functions = _dynamic_support()
+                challenge.value = functions[challenge.function](challenge)
         _call_stage(stage_hook, "after_challenges")
+
+        for action in plan.challenges:
+            bonus = action.spec.bonus
+            if bonus.mode == "preserve":
+                continue
+            service = _bonus_service()
+            challenge = challenge_rows[action.spec.name]
+            if bonus.mode == "disabled":
+                service.disable_bonus_program(challenge.id)
+            else:
+                service.save_bonus_program(
+                    challenge, bonus.mode, _bonus_rows(service, bonus)
+                )
+        _call_stage(stage_hook, "after_bonus")
 
         imported_ids = tuple(row.id for row in challenge_rows.values())
         if imported_ids:

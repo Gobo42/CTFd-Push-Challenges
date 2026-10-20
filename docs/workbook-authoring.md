@@ -22,7 +22,7 @@ python3 tools/create_workbook.py \
 ```
 
 The value must be at least `1`. It sets the available row count on each of the
-Challenges, Flags, Solutions, and Hints sheets. The command replaces an
+Challenges, Flags, Solutions, Hints, and Bonus Tiers sheets. The command replaces an
 existing output file, so do not point it at a workbook containing authored
 challenges unless that replacement is intentional.
 
@@ -32,10 +32,11 @@ Enter one challenge per row.
 
 - `Name`: required, exact and case-sensitive.
 - `Description`: Markdown challenge text; may be blank for a placeholder.
-- `Value`: whole-number score. Zero and negative values are accepted.
+- `Value`: whole-number fixed score for Standard, or initial score for Dynamic.
+  Standard accepts zero and negative values; Dynamic requires zero or greater.
 - `Category`: required single category.
 - `State`: Hidden, Visible, or Locked; defaults to Hidden.
-- `Type`: Standard or Dynamic. Only Standard is currently supported.
+- `Type`: Standard or Dynamic.
 - `Tags`: one or more hash-prefixed tags, such as
   `#beginner #web authentication`.
 - `Next`: optional exact name of the next challenge. It may name another row or
@@ -45,6 +46,24 @@ Enter one challenge per row.
 - `Attribution`: optional byline. Blank clears the value on overwrite.
 - `Connection Info`: optional connection instructions. Blank clears the value
   on overwrite.
+- `Scoring Function`: Linear or Logarithmic for Dynamic; blank for Standard.
+- `Minimum Value`: nonnegative whole-number floor for Dynamic, no greater than
+  Value; blank for Standard.
+- `Decay`: positive whole number for Dynamic; blank for Standard. It uses the
+  selected native CTFd scoring function's meaning, not a bonus percentage.
+- `Bonus Mode`: blank preserves existing settings; Disabled stops future bonus
+  awards; Absolute or Percentage replaces and enables the complete tier list.
+
+For example, a Dynamic challenge can use Value `100`, Minimum Value `20`,
+Decay `10`, and Scoring Function `Linear`. CTFd calculates its current value
+using existing eligible solves when it is imported. Changing Dynamic settings
+can therefore change existing players' live native scores; fixed bonus awards
+and closed Monthly Game snapshots are not recalculated.
+
+An existing challenge of a different type is **not converted**. The server
+skips that entire challenge and lists it under `MANUAL ACTION REQUIRED` at the
+end. Change its type manually in CTFd, then rerun. Other valid challenges still
+import. Review the final callout even if the command succeeds.
 
 When Excel stores a value entered in a text or content cell as a number, the
 validator converts it to text before creating the manifest. For example, a
@@ -63,6 +82,34 @@ of the Logic cell and prints a normalization warning.
 `Next` is case-sensitive. The workstation validator checks links among workbook
 rows. The server dry-run also resolves existing CTFd challenges and checks the
 complete projected hierarchy. Self-links and circular chains are prohibited.
+
+## Bonus Tiers
+
+Bonus tiers are optional and require the updated Monthly Game plugin on the
+server. They work with Standard or Dynamic challenges in individual mode.
+
+Choose Absolute or Percentage in the challenge's Bonus Mode, then enter one
+row per tier on Bonus Tiers:
+
+- `Challenge`: select an exact authored challenge name.
+- `Start Placement` and `End Placement`: inclusive positive whole numbers.
+- `Amount`: nonnegative whole points for Absolute, or a nonnegative percentage
+  for Percentage. Extra percentage decimals are truncated to two places.
+
+Enter each challenge's tiers in placement order, starting at 1, with no gaps
+or overlaps. For example, `1–1: 50`, `2–5: 25`, `6–10: 10` creates three tiers.
+Zero amounts consume placements without awarding points. For Percentage,
+the bonus uses the challenge value at solve time and truncates the resulting
+points to a whole number. These are lifetime placements, not monthly ones.
+
+Leave Bonus Tiers empty when Bonus Mode is blank or Disabled. Disabled keeps
+existing tiers and placement progress; blank changes nothing. A tier for a
+missing challenge, a gap or overlap, or tiers without an enabled mode blocks
+export. Unlike orphan hints, orphan bonus rows are not silently discarded.
+
+Imports do not revoke or recalculate existing bonus awards, reset placement
+progress, or backfill awards for old solves. Enabling a new program counts
+existing non-hidden solves as already consumed placements.
 
 ## Flags
 
@@ -129,6 +176,11 @@ requirements, and hierarchy links. Review that output before transferring the
 manifest. A blocking error produces a nonzero exit status and no manifest.
 Nonblocking warnings are embedded in the manifest so the server dry-run shows
 them again.
+
+Older workbooks without the new scoring columns or Bonus Tiers sheet still
+work for Standard challenges and preserve bonus settings. New exports use
+manifest version 2; update the server plugin before importing them. Existing
+version-1 manifests remain accepted.
 
 Files are intentionally outside this workflow. Add or remove challenge and
 solution attachments manually in CTFd.

@@ -1,7 +1,7 @@
 # Push Challenges
 
 Push Challenges provides a CLI-only CTFd plugin and independent authoring
-tools for creating or overwriting standard challenges in bulk.
+tools for creating or overwriting Standard and Dynamic challenges in bulk.
 
 Challenge authors can work in the included macro-free Excel workbook or in a
 strict CSV file. The standalone validator prints every decoded challenge and
@@ -23,8 +23,10 @@ directory. Transfer and install the validator's output at the server path
 before running these commands. See
 [Installation](docs/installation.md#ctfd-cli-launcher) before server imports.
 
-The first release supports fixed-value Standard challenges in individual or
-team CTFd installations. Dynamic challenge input is recognized but rejected.
+Standard challenges use fixed values. Dynamic challenges use CTFd's native
+Linear or Logarithmic decay in individual or team installations. Optional
+first-solver bonus tiers require an updated Monthly Game plugin, which supports
+individual mode only. Blank Bonus Mode leaves existing bonus settings alone.
 The plugin has no web routes and does not create, remove, or modify attached
 files.
 
@@ -50,8 +52,10 @@ Python package.
 
 Dry-run is the default. Exact, case-sensitive challenge names select overwrite
 targets. The importer validates all references before writing, rejects circular
-`Next` chains, and commits the complete import once. A pre-commit failure rolls
-back the transaction.
+`Next` chains, and commits the eligible import once. An existing challenge with
+a different type is skipped entirely, not converted. The final
+`MANUAL ACTION REQUIRED` section lists every skip, even when the command exits
+successfully. Other pre-commit failures roll back the transaction.
 
 Challenges, hints, solution records, and attachments are never deleted. Flags
 and tags for imported challenges are deliberately replaced. Existing hints

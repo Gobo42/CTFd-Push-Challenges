@@ -11,9 +11,11 @@ from push_challenges_core.errors import Diagnostic
 
 from .normalize import AuthoringDocument, AuthoringRow
 from .workbook import (
+    BONUS_HEADERS,
     CHALLENGE_HEADERS,
     FLAG_HEADERS,
     HINT_HEADERS,
+    LEGACY_CHALLENGE_HEADERS,
     SOLUTION_HEADERS,
 )
 
@@ -101,6 +103,13 @@ def load_xlsx(path: Path) -> AuthoringDocument:
         "Hints": {"Cost"},
     }
     for name, headers in REQUIRED_SHEETS.items():
+        if name == "Challenges" and all(
+            _blank(workbook[name].cell(1, index).value)
+            for index in range(
+                len(LEGACY_CHALLENGE_HEADERS) + 1, len(CHALLENGE_HEADERS) + 1
+            )
+        ):
+            headers = LEGACY_CHALLENGE_HEADERS
         rows, error = _sheet_rows(
             workbook[name], headers, default_columns=defaults[name]
         )
@@ -119,10 +128,37 @@ def load_xlsx(path: Path) -> AuthoringDocument:
         values["Hints"] = []
         values["Solution"] = ""
         values["Solution State"] = ""
+        values["Bonus Tiers"] = []
         source = f"Challenges row {row_number}"
         challenge_rows.append(AuthoringRow(source, values))
         values_by_name.setdefault(name, values)
         source_by_name.setdefault(name, source)
+
+    if "Bonus Tiers" in workbook.sheetnames:
+        bonus_rows, error = _sheet_rows(
+            workbook["Bonus Tiers"], BONUS_HEADERS, default_columns=set()
+        )
+        if error is not None:
+            diagnostics.append(error)
+        for row_number, values in bonus_rows:
+            challenge = "" if values["Challenge"] is None else str(values["Challenge"])
+            if challenge not in values_by_name:
+                diagnostics.append(
+                    _diagnostic(
+                        "orphan_bonus",
+                        f"Bonus tier references missing input challenge {challenge!r}",
+                        "Bonus Tiers",
+                        row_number,
+                    )
+                )
+                continue
+            values_by_name[challenge]["Bonus Tiers"].append(
+                {
+                    "start": values["Start Placement"],
+                    "end": values["End Placement"],
+                    "amount": values["Amount"],
+                }
+            )
 
     for row_number, values in parsed["Flags"]:
         challenge = "" if values["Challenge"] is None else str(values["Challenge"])

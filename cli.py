@@ -8,7 +8,7 @@ from pathlib import Path
 import click
 from flask.cli import AppGroup
 
-from .importer import ImportPreflightError, build_plan, render_plan
+from .importer import ImportPreflightError, build_plan, render_plan, render_summary
 from .push_challenges_core.errors import ManifestValidationError
 from .push_challenges_core.manifest import load_manifest
 
@@ -20,9 +20,7 @@ push_challenges_cli = AppGroup(
 
 def _manifest_error(error: ManifestValidationError) -> click.ClickException:
     lines = [
-        f"{item.source}: {item.message}"
-        for item in error.diagnostics
-        if item.blocking
+        f"{item.source}: {item.message}" for item in error.diagnostics if item.blocking
     ]
     return click.ClickException("\n".join(lines))
 
@@ -34,9 +32,7 @@ def _manifest_error(error: ManifestValidationError) -> click.ClickException:
 )
 @click.option("--apply", "should_apply", is_flag=True, help="Commit the plan.")
 @click.option("--debug", is_flag=True, help="Show unexpected tracebacks.")
-def import_manifest(
-    manifest_file: Path, should_apply: bool, debug: bool
-) -> None:
+def import_manifest(manifest_file: Path, should_apply: bool, debug: bool) -> None:
     """Validate MANIFEST_FILE and print or apply its complete plan."""
     try:
         manifest = load_manifest(manifest_file)
@@ -44,6 +40,7 @@ def import_manifest(
         click.echo(render_plan(plan), nl=False)
         if not should_apply:
             click.echo("DRY RUN: no database changes were made.")
+            click.echo(render_summary(plan))
             return
         from .importer import apply_plan
 
@@ -51,6 +48,7 @@ def import_manifest(
         click.echo("APPLIED: database transaction committed.")
         for warning in result.cache_warnings:
             click.echo(f"WARNING [cache_invalidation_failed] {warning}")
+        click.echo(render_summary(plan))
     except ManifestValidationError as error:
         raise _manifest_error(error) from error
     except ImportPreflightError as error:

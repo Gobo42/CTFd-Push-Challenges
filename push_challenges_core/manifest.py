@@ -4,11 +4,21 @@ from __future__ import annotations
 
 import dataclasses
 import json
+from decimal import ROUND_DOWN, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
 from .errors import Diagnostic, ManifestValidationError
-from .model import ChallengeSpec, FlagSpec, HintSpec, Manifest, SolutionSpec
+from .model import (
+    BonusSpec,
+    BonusTierSpec,
+    ChallengeSpec,
+    DynamicScoringSpec,
+    FlagSpec,
+    HintSpec,
+    Manifest,
+    SolutionSpec,
+)
 
 TOP_KEYS = {"format", "version", "warnings", "challenges"}
 WARNING_KEYS = {"code", "message", "source", "blocking"}
@@ -167,9 +177,7 @@ def _warning(
     return Diagnostic(code, message, item_source, blocking)
 
 
-def _flag(
-    value: object, source: str, diagnostics: list[Diagnostic]
-) -> FlagSpec | None:
+def _flag(value: object, source: str, diagnostics: list[Diagnostic]) -> FlagSpec | None:
     if not isinstance(value, dict):
         _error(diagnostics, "invalid_type", "Expected an object", source)
         return None
@@ -195,9 +203,7 @@ def _flag(
     return FlagSpec(flag_type, content, data)
 
 
-def _hint(
-    value: object, source: str, diagnostics: list[Diagnostic]
-) -> HintSpec | None:
+def _hint(value: object, source: str, diagnostics: list[Diagnostic]) -> HintSpec | None:
     if not isinstance(value, dict):
         _error(diagnostics, "invalid_type", "Expected an object", source)
         return None
@@ -303,14 +309,153 @@ def _solution(
     return None
 
 
+def _scoring(value, challenge_type, initial, source, diagnostics):
+    if challenge_type == "standard":
+        if value is not None:
+            _error(
+                diagnostics, "invalid_scoring", "Standard scoring must be null", source
+            )
+        return None
+    if not isinstance(value, dict):
+        _error(
+            diagnostics,
+            "invalid_scoring",
+            "Dynamic scoring settings are required",
+            source,
+        )
+        return None
+    _check_keys(value, {"function", "minimum", "decay"}, source, diagnostics)
+    function = _enum(
+        value.get("function"),
+        {"linear", "logarithmic"},
+        f"{source}.function",
+        diagnostics,
+    )
+    minimum = _integer(
+        value.get("minimum"), f"{source}.minimum", diagnostics, minimum=0
+    )
+    decay = _integer(value.get("decay"), f"{source}.decay", diagnostics, minimum=1)
+    if type(initial) is int and (initial < 0 or initial > 2_147_483_647):
+        _error(
+            diagnostics,
+            "invalid_scoring",
+            "Dynamic Value must be between 0 and 2147483647",
+            source,
+        )
+    if minimum is not None and type(initial) is int and minimum > initial:
+        _error(
+            diagnostics,
+            "invalid_scoring",
+            "Minimum Value must not exceed Value",
+            f"{source}.minimum",
+        )
+    if decay is not None and decay > 2_147_483_647:
+        _error(
+            diagnostics,
+            "invalid_scoring",
+            "Decay exceeds CTFd integer range",
+            f"{source}.decay",
+        )
+    if function not in {"linear", "logarithmic"} or minimum is None or decay is None:
+        return None
+    return DynamicScoringSpec(function, minimum, decay)
+
+
+def _bonus(value, source, diagnostics):
+    if not isinstance(value, dict):
+        _error(diagnostics, "invalid_bonus", "Expected a bonus object", source)
+        return BonusSpec()
+    _check_keys(value, {"mode", "tiers"}, source, diagnostics)
+    mode = _enum(
+        value.get("mode"),
+        {"preserve", "disabled", "absolute", "percentage"},
+        f"{source}.mode",
+        diagnostics,
+    )
+    rows = value.get("tiers")
+    if not isinstance(rows, list):
+        _error(diagnostics, "invalid_bonus", "Expected a tier array", source)
+        return BonusSpec()
+    if mode in {"preserve", "disabled"}:
+        if rows:
+            _error(
+                diagnostics,
+                "invalid_bonus",
+                "Preserve/disabled cannot include tiers",
+                source,
+            )
+        return BonusSpec(mode)
+    if not rows:
+        _error(diagnostics, "invalid_bonus", "At least one tier is required", source)
+    tiers = []
+    expected_start = 1
+    for index, row in enumerate(rows):
+        tier_source = f"{source}.tiers[{index}]"
+        if not isinstance(row, dict):
+            _error(diagnostics, "invalid_bonus", "Expected a tier object", tier_source)
+            continue
+        _check_keys(row, {"start", "end", "amount"}, tier_source, diagnostics)
+        start = _integer(
+            row.get("start"), f"{tier_source}.start", diagnostics, minimum=1
+        )
+        end = _integer(row.get("end"), f"{tier_source}.end", diagnostics, minimum=1)
+        if start != expected_start or end is None or start is None or end < start:
+            _error(
+                diagnostics,
+                "invalid_bonus",
+                "Tier ranges must start at 1 and be contiguous "
+                "without gaps or overlaps",
+                tier_source,
+            )
+        if end is not None:
+            expected_start = end + 1
+            if end > 2_147_483_647:
+                _error(
+                    diagnostics,
+                    "invalid_bonus",
+                    "Placement exceeds CTFd integer range",
+                    tier_source,
+                )
+        raw_amount = _string(row.get("amount"), f"{tier_source}.amount", diagnostics)
+        try:
+            amount = Decimal(raw_amount) if raw_amount is not None else Decimal("NaN")
+            if (
+                not amount.is_finite()
+                or amount < 0
+                or amount > Decimal("9999999999.99")
+            ):
+                raise ValueError(
+                    "Amount must be finite, nonnegative, and fit 10 whole digits"
+                )
+            if mode == "absolute" and (
+                amount != amount.to_integral_value() or amount > 2_147_483_647
+            ):
+                raise ValueError(
+                    "Absolute amount must be whole points in CTFd integer range"
+                )
+            amount = amount.quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+        except (InvalidOperation, ValueError):
+            _error(
+                diagnostics,
+                "invalid_bonus",
+                "Invalid bonus amount",
+                f"{tier_source}.amount",
+            )
+            continue
+        if start is not None and end is not None:
+            tiers.append(BonusTierSpec(start, end, str(amount)))
+    return BonusSpec(mode, tuple(tiers))
+
+
 def _challenge(
-    value: object, index: int, diagnostics: list[Diagnostic]
+    value: object, index: int, diagnostics: list[Diagnostic], version: int = 1
 ) -> ChallengeSpec | None:
     source = f"challenges[{index}]"
     if not isinstance(value, dict):
         _error(diagnostics, "invalid_type", "Expected an object", source)
         return None
-    _check_keys(value, CHALLENGE_KEYS, source, diagnostics)
+    keys = CHALLENGE_KEYS | {"scoring", "bonus"} if version == 2 else CHALLENGE_KEYS
+    _check_keys(value, keys, source, diagnostics)
     name = _string(
         value.get("name"),
         f"{source}.name",
@@ -340,23 +485,37 @@ def _challenge(
     )
     raw_type = value.get("type")
     challenge_type = _string(raw_type, f"{source}.type", diagnostics)
-    if challenge_type == "dynamic":
+    if challenge_type == "dynamic" and version == 1:
         _error(
             diagnostics,
             "unsupported_challenge_type",
-            "Dynamic is recognized but not yet supported",
+            "Dynamic requires manifest version 2",
             f"{source}.type",
         )
-    elif challenge_type != "standard" and isinstance(raw_type, str):
+    elif challenge_type not in {"standard", "dynamic"} and isinstance(raw_type, str):
         _error(
             diagnostics,
             "invalid_value",
-            "Only standard challenges are supported",
+            "Only standard and dynamic challenges are supported",
             f"{source}.type",
         )
-    logic = _enum(
-        value.get("logic"), {"any", "all"}, f"{source}.logic", diagnostics
+    scoring = (
+        _scoring(
+            value.get("scoring"),
+            challenge_type,
+            challenge_value,
+            f"{source}.scoring",
+            diagnostics,
+        )
+        if version == 2
+        else None
     )
+    bonus = (
+        _bonus(value.get("bonus"), f"{source}.bonus", diagnostics)
+        if version == 2
+        else BonusSpec()
+    )
+    logic = _enum(value.get("logic"), {"any", "all"}, f"{source}.logic", diagnostics)
     max_attempts = _integer(
         value.get("max_attempts"),
         f"{source}.max_attempts",
@@ -467,7 +626,7 @@ def _challenge(
     if (
         any(item is None for item in required_values)
         or state not in {"hidden", "visible", "locked"}
-        or challenge_type != "standard"
+        or challenge_type not in {"standard", "dynamic"}
         or normalized_logic not in {"any", "all"}
     ):
         return None
@@ -477,7 +636,7 @@ def _challenge(
         value=challenge_value,
         category=category,
         state=state,
-        type="standard",
+        type=challenge_type,
         logic=normalized_logic,
         max_attempts=max_attempts,
         attribution=attribution,
@@ -487,6 +646,8 @@ def _challenge(
         solution=solution,
         flags=tuple(flags),
         hints=tuple(hints),
+        scoring=scoring,
+        bonus=bonus,
     )
 
 
@@ -505,8 +666,9 @@ def validate_manifest_data(
             "Expected format 'push-challenges'",
             "format",
         )
-    if type(data.get("version")) is not int or data.get("version") != 1:
-        _error(diagnostics, "unsupported_version", "Expected version 1", "version")
+    version = data.get("version")
+    if type(version) is not int or version not in (1, 2):
+        _error(diagnostics, "unsupported_version", "Expected version 1 or 2", "version")
 
     warnings: list[Diagnostic] = []
     raw_warnings = data.get("warnings")
@@ -525,7 +687,7 @@ def validate_manifest_data(
         _error(diagnostics, "invalid_type", "Expected an array", "challenges")
     else:
         for index, item in enumerate(raw_challenges):
-            parsed = _challenge(item, index, diagnostics)
+            parsed = _challenge(item, index, diagnostics, version)
             if parsed is not None:
                 if parsed.name in names:
                     _error(
@@ -544,7 +706,9 @@ def validate_manifest_data(
     result_diagnostics = tuple(diagnostics)
     if any(item.blocking for item in result_diagnostics):
         return None, result_diagnostics
-    return Manifest(tuple(warnings), tuple(challenges)), result_diagnostics
+    return Manifest(
+        tuple(warnings), tuple(challenges), version=version
+    ), result_diagnostics
 
 
 def load_manifest(path: Path) -> Manifest:
@@ -565,13 +729,16 @@ def load_manifest(path: Path) -> Manifest:
 
 
 def dump_manifest(manifest: Manifest, path: Path) -> None:
+    challenges = [dataclasses.asdict(challenge) for challenge in manifest.challenges]
+    if manifest.version == 1:
+        for challenge in challenges:
+            challenge.pop("scoring")
+            challenge.pop("bonus")
     data = {
         "format": manifest.format,
         "version": manifest.version,
         "warnings": [warning.to_data() for warning in manifest.warnings],
-        "challenges": [
-            dataclasses.asdict(challenge) for challenge in manifest.challenges
-        ],
+        "challenges": challenges,
     }
     text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
     path.write_text(text, encoding="utf-8")

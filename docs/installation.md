@@ -1,5 +1,11 @@
 # Installation
 
+Use matching current authoring-tools and server-plugin packages. New exports
+use manifest version 2; the updated server also accepts version 1. Dynamic
+scoring uses CTFd's built-in `dynamic_challenges` plugin. To import first-solver
+bonus settings, install the updated Monthly Game plugin too and restart CTFd
+after updating server code. Monthly Game requires individual-user mode.
+
 ## Server plugin
 
 Copy `push-challenges.tar.gz` to the CTFd server and extract it directly in the

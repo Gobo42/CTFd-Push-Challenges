@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 ChallengeState = Literal["hidden", "visible", "locked"]
-ChallengeType = Literal["standard"]
+ChallengeType = Literal["standard", "dynamic"]
 FlagLogic = Literal["any", "all"]
 FlagType = Literal["static", "regex"]
 FlagData = Literal["case_sensitive", "case_insensitive"]
@@ -35,6 +35,26 @@ class SolutionSpec:
 
 
 @dataclass(frozen=True)
+class DynamicScoringSpec:
+    function: Literal["linear", "logarithmic"]
+    minimum: int
+    decay: int
+
+
+@dataclass(frozen=True)
+class BonusTierSpec:
+    start: int
+    end: int
+    amount: str
+
+
+@dataclass(frozen=True)
+class BonusSpec:
+    mode: Literal["preserve", "disabled", "absolute", "percentage"] = "preserve"
+    tiers: tuple[BonusTierSpec, ...] = ()
+
+
+@dataclass(frozen=True)
 class ChallengeSpec:
     name: str
     description: str
@@ -51,6 +71,8 @@ class ChallengeSpec:
     solution: SolutionSpec
     flags: tuple[FlagSpec, ...]
     hints: tuple[HintSpec, ...]
+    scoring: DynamicScoringSpec | None = None
+    bonus: BonusSpec = BonusSpec()
 
 
 @dataclass(frozen=True)
@@ -58,7 +80,7 @@ class Manifest:
     warnings: tuple["Diagnostic", ...]
     challenges: tuple[ChallengeSpec, ...]
     format: Literal["push-challenges"] = "push-challenges"
-    version: Literal[1] = 1
+    version: Literal[1, 2] = 2
 
 
 from .errors import Diagnostic  # noqa: E402
