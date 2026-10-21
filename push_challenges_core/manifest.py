@@ -455,7 +455,21 @@ def _challenge(
         _error(diagnostics, "invalid_type", "Expected an object", source)
         return None
     keys = CHALLENGE_KEYS | {"scoring", "bonus"} if version == 2 else CHALLENGE_KEYS
+    if version == 2 and "position" in value:
+        keys |= {"position"}
     _check_keys(value, keys, source, diagnostics)
+    position = None
+    if version == 2 and value.get("position") is not None:
+        position = _integer(
+            value["position"], f"{source}.position", diagnostics, minimum=0
+        )
+        if position is not None and position > 2_147_483_647:
+            _error(
+                diagnostics,
+                "value_out_of_range",
+                "Position exceeds CTFd integer range",
+                f"{source}.position",
+            )
     name = _string(
         value.get("name"),
         f"{source}.name",
@@ -648,6 +662,7 @@ def _challenge(
         hints=tuple(hints),
         scoring=scoring,
         bonus=bonus,
+        position=position,
     )
 
 
@@ -734,6 +749,7 @@ def dump_manifest(manifest: Manifest, path: Path) -> None:
         for challenge in challenges:
             challenge.pop("scoring")
             challenge.pop("bonus")
+            challenge.pop("position")
     data = {
         "format": manifest.format,
         "version": manifest.version,

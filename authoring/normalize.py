@@ -268,6 +268,9 @@ def _challenge_data(
         )
         tags = ()
     next_name = _text(row.values.get("Next")).strip() or None
+    position = None
+    if _text(row.values.get("Position")).strip():
+        position = _integer_value(row, "Position", diagnostics)
     challenge_type = _enum_value(row, "Type", TYPE_VALUES, diagnostics)
     scoring = None
     if challenge_type == "dynamic":
@@ -324,6 +327,7 @@ def _challenge_data(
         "connection_info": _text(row.values.get("Connection Info")),
         "tags": list(tags),
         "next": next_name,
+        "position": position,
         "solution": _solution_data(row, diagnostics),
         "flags": _flags_data(row, diagnostics),
         "hints": _hints_data(row, diagnostics),

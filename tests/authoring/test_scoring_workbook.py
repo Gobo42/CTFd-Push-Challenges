@@ -49,7 +49,7 @@ def test_old_workbook_without_new_columns_or_sheet_remains_supported(tmp_path):
     create_workbook(path, author_rows=2)
     book = load_workbook(path)
     sheet = book["Challenges"]
-    sheet.delete_cols(13, 4)
+    sheet.delete_cols(13, sheet.max_column - 12)
     del book["Bonus Tiers"]
     sheet["A2"] = "Legacy"
     sheet["C2"] = 100

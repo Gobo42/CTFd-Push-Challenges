@@ -6,19 +6,29 @@ line endings, and quoted multiline descriptions.
 The extended header sequence is:
 
 ```text
-Name,Description,Value,Category,State,Type,Tags,Next,Logic,Max Attempts,Attribution,Connection Info,Solution,Solution State,Flags,Hints,Scoring Function,Minimum Value,Decay,Bonus Mode,Bonus Tiers
+Name,Description,Value,Category,State,Type,Tags,Next,Logic,Max Attempts,Attribution,Connection Info,Solution,Solution State,Flags,Hints,Scoring Function,Minimum Value,Decay,Bonus Mode,Bonus Tiers,Position
 ```
 
 Unknown, missing, reordered, or duplicate headers are errors.
 The original 16-column header ending in Hints is also accepted for legacy
-Standard input; it preserves existing bonus settings. Use the complete
-extended header when including scoring or bonus fields.
+Standard input; it preserves existing bonus settings. The 21-column header
+ending in Bonus Tiers also remains accepted. Both older formats preserve
+existing positions. Use the complete extended header to set Position.
 
 Required values are Name, Value, Category, Type, and Max Attempts. Description
 may be blank. State defaults to Hidden and Logic defaults to Require Any Flag.
 Max Attempts must be a nonnegative whole number; `0` means unlimited.
 Attribution and Connection Info may be blank and are explicitly cleared on
 overwrite.
+
+## Display order
+
+Position is optional. Supply a nonnegative whole number up to `2147483647`.
+Positive positions sort lowest first, before challenges at Position `0`.
+Blank preserves an existing position or leaves a new challenge at default `0`.
+Explicit `0` restores automatic point ordering. Workbook/CSV row order and
+Next links do not set positions. See the
+[ordering example](workbook-authoring.md#set-challenge-display-order).
 
 ## Scoring and bonuses
 

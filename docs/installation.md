@@ -116,8 +116,11 @@ python3 tools/create_workbook.py \
 
 `--output` is required. `--rows` defaults to `500` and must be at least `1`.
 The selected row count is applied independently to the Challenges, Flags,
-Solutions, and Hints tables. Generating to an existing path replaces that
+Solutions, Hints, and Bonus Tiers tables. Generating to an existing path replaces that
 workbook, so retain authored files under a different name.
+
+Authors can follow the [workbook field guide](workbook-authoring.md) and
+[scoring and bonus examples](scoring-guide.md) without administering the server.
 
 ## Filesystem permissions
 

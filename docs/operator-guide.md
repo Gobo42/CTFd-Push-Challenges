@@ -24,6 +24,7 @@ Review:
 - solution preserve, upsert, or clear intent;
 - hint create, update, preserve, and requirement resolution;
 - `Next` targets;
+- Position values, including explicit `0` versus preserve/default;
 - retained authoring warnings;
 - Dynamic initial/minimum/decay/function settings and bonus preserve, disable,
   or replace intent;
@@ -75,6 +76,9 @@ challenge imported from a zero exit status.
 
 ## Dynamic scoring and bonus configuration
 
+Give authors the [workbook field guide](workbook-authoring.md) and
+[scoring and bonus examples](scoring-guide.md) before collecting their input.
+
 Dynamic imports require CTFd's native `dynamic_challenges` plugin. They set
 initial value, minimum, decay, and Linear/Logarithmic function, then recalculate
 the current value from existing eligible solves using CTFd's own function.
@@ -118,6 +122,16 @@ requirements for those imported hints.
 the input and existing CTFd challenges. Unknown targets, ambiguity, self-links,
 and circular chains abort preflight.
 
+Position is optional in version-2 manifests. A missing or null `position`
+preserves an overwrite target's position; a new challenge keeps default `0`.
+An integer from `0` through `2147483647` sets the native CTFd field. Positive
+positions sort lowest first; `0` places a challenge after positioned challenges
+and orders it by points. Equal positions fall back to points, then database ID.
+Row order and Next links do not assign positions. Custom themes can override
+native ordering, so verify the player-facing list after applying. See
+[Set challenge display order](workbook-authoring.md#set-challenge-display-order).
+Update both the tools and server plugin before importing Position exports.
+
 ## Preserved data
 
 The importer never deletes:
@@ -129,8 +143,9 @@ The importer never deletes:
 - stored files.
 
 It does not modify attachments, solves, submissions, attempts, challenge
-requirements, module membership, position, or fields outside the supported
-manifest. Hint updates preserve hint IDs and unlock/payment history. Solution
+requirements, module membership, or fields outside the supported manifest.
+Position is preserved unless explicitly supplied. Hint updates preserve hint IDs
+and unlock/payment history. Solution
 updates preserve the solution ID and attachment links.
 
 ## Transactions and failures

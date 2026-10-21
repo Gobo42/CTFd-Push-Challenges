@@ -16,6 +16,7 @@ from .workbook import (
     FLAG_HEADERS,
     HINT_HEADERS,
     LEGACY_CHALLENGE_HEADERS,
+    SCORING_CHALLENGE_HEADERS,
     SOLUTION_HEADERS,
 )
 
@@ -103,13 +104,14 @@ def load_xlsx(path: Path) -> AuthoringDocument:
         "Hints": {"Cost"},
     }
     for name, headers in REQUIRED_SHEETS.items():
-        if name == "Challenges" and all(
-            _blank(workbook[name].cell(1, index).value)
-            for index in range(
-                len(LEGACY_CHALLENGE_HEADERS) + 1, len(CHALLENGE_HEADERS) + 1
-            )
-        ):
-            headers = LEGACY_CHALLENGE_HEADERS
+        if name == "Challenges":
+            for legacy in (LEGACY_CHALLENGE_HEADERS, SCORING_CHALLENGE_HEADERS):
+                if all(
+                    _blank(workbook[name].cell(1, index).value)
+                    for index in range(len(legacy) + 1, len(CHALLENGE_HEADERS) + 1)
+                ):
+                    headers = legacy
+                    break
         rows, error = _sheet_rows(
             workbook[name], headers, default_columns=defaults[name]
         )

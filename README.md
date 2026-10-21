@@ -30,6 +30,11 @@ individual mode only. Blank Bonus Mode leaves existing bonus settings alone.
 The plugin has no web routes and does not create, remove, or modify attached
 files.
 
+Use the workbook's optional Position column to keep related challenges in
+sequence regardless of point value. Blank preserves existing ordering; `0`
+restores CTFd's automatic point ordering. See
+[Set challenge display order](docs/workbook-authoring.md#set-challenge-display-order).
+
 ## Packages
 
 - `push-challenges.tar.gz` is the server plugin. Extract it in CTFd's plugins
@@ -44,6 +49,7 @@ Python package.
 
 - [Installation](docs/installation.md)
 - [Workbook authoring](docs/workbook-authoring.md)
+- [Scoring and first-solver bonuses, with worked examples](docs/scoring-guide.md)
 - [CSV format](docs/csv-format.md)
 - [Operator guide](docs/operator-guide.md)
 - [Troubleshooting](docs/troubleshooting.md)

@@ -73,6 +73,7 @@ class ChallengeSpec:
     hints: tuple[HintSpec, ...]
     scoring: DynamicScoringSpec | None = None
     bonus: BonusSpec = BonusSpec()
+    position: int | None = None
 
 
 @dataclass(frozen=True)

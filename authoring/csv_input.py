@@ -27,13 +27,14 @@ LEGACY_CSV_HEADERS = (
     "Flags",
     "Hints",
 )
-CSV_HEADERS = LEGACY_CSV_HEADERS + (
+SCORING_CSV_HEADERS = LEGACY_CSV_HEADERS + (
     "Scoring Function",
     "Minimum Value",
     "Decay",
     "Bonus Mode",
     "Bonus Tiers",
 )
+CSV_HEADERS = SCORING_CSV_HEADERS + ("Position",)
 
 
 def _header_error(actual: tuple[str, ...]) -> Diagnostic:
@@ -52,7 +53,7 @@ def load_csv(path: Path) -> AuthoringDocument:
         with path.open(encoding="utf-8-sig", newline="") as handle:
             reader = csv.reader(handle, strict=True)
             header = tuple(next(reader, ()))
-            if header not in (CSV_HEADERS, LEGACY_CSV_HEADERS):
+            if header not in (CSV_HEADERS, SCORING_CSV_HEADERS, LEGACY_CSV_HEADERS):
                 return AuthoringDocument((), (_header_error(header),))
             for line_number, values in enumerate(reader, start=2):
                 if not values or all(not value.strip() for value in values):

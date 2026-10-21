@@ -13,6 +13,7 @@ SERVER_FILES = {
     "docs/csv-format.md",
     "docs/installation.md",
     "docs/operator-guide.md",
+    "docs/scoring-guide.md",
     "docs/troubleshooting.md",
     "docs/workbook-authoring.md",
     "push_challenges_core/__init__.py",
@@ -34,6 +35,7 @@ TOOLS_FILES = {
     "docs/csv-format.md",
     "docs/installation.md",
     "docs/operator-guide.md",
+    "docs/scoring-guide.md",
     "docs/troubleshooting.md",
     "docs/workbook-authoring.md",
     "push_challenges_core/__init__.py",
@@ -90,10 +92,13 @@ def test_shared_packager_builds_exact_server_and_tools_archives():
     assert tools_roots == {"push-challenges-tools"}
     assert server == SERVER_FILES
     assert tools == TOOLS_FILES
-    assert archive_markdown_links(
-        WORKSPACE / "push-challenges-tools.tar.gz",
-        "push-challenges-tools/README.md",
-    ) <= tools
+    assert (
+        archive_markdown_links(
+            WORKSPACE / "push-challenges-tools.tar.gz",
+            "push-challenges-tools/README.md",
+        )
+        <= tools
+    )
     assert not any(
         part in server
         for part in (

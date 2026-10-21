@@ -8,6 +8,7 @@ PUBLIC_DOCS = (
     ROOT / "docs/operator-guide.md",
     ROOT / "docs/troubleshooting.md",
     ROOT / "docs/workbook-authoring.md",
+    ROOT / "docs/scoring-guide.md",
     ROOT / "docs/csv-format.md",
 )
 
@@ -52,9 +53,7 @@ def test_operator_guide_dry_runs_and_applies_the_same_manifest():
 
 
 def test_troubleshooting_covers_launcher_configuration_and_manifest_access():
-    troubleshooting = (ROOT / "docs/troubleshooting.md").read_text(
-        encoding="utf-8"
-    )
+    troubleshooting = (ROOT / "docs/troubleshooting.md").read_text(encoding="utf-8")
     required = (
         "No such command",
         "EnvironmentFile",
@@ -70,3 +69,42 @@ def test_troubleshooting_covers_launcher_configuration_and_manifest_access():
     normalized = " ".join(troubleshooting.split())
     for value in required:
         assert value in normalized, f"troubleshooting guide missing {value}"
+
+
+def test_workbook_guide_describes_every_authored_column():
+    from authoring.workbook import (
+        BONUS_HEADERS,
+        CHALLENGE_HEADERS,
+        FLAG_HEADERS,
+        HINT_HEADERS,
+        SOLUTION_HEADERS,
+    )
+
+    text = (ROOT / "docs/workbook-authoring.md").read_text(encoding="utf-8")
+    for sheet, headers in (
+        ("Challenges", CHALLENGE_HEADERS),
+        ("Flags", FLAG_HEADERS),
+        ("Solutions", SOLUTION_HEADERS),
+        ("Hints", HINT_HEADERS),
+        ("Bonus Tiers", BONUS_HEADERS),
+    ):
+        section = text.split(f"## {sheet}\n", 1)[1].split("\n## ", 1)[0]
+        for header in headers:
+            assert f"`{header}`" in section, f"{sheet} missing {header}"
+
+
+def test_scoring_example_table_matches_native_ctfd_functions(monkeypatch):
+    from types import SimpleNamespace
+
+    from CTFd.plugins.dynamic_challenges import decay
+
+    text = (ROOT / "docs/scoring-guide.md").read_text(encoding="utf-8")
+    comparison = text.split("## Compare the two functions", 1)[1].split("\n## ", 1)[0]
+    rows = re.findall(r"^\| (\d+) \| (\d+) \| (\d+) \|$", comparison, re.MULTILINE)
+    assert len(rows) >= 6
+    for solves, linear_value, logarithmic_value in rows:
+        monkeypatch.setattr(decay, "get_solve_count", lambda _, n=int(solves): n)
+        challenge = SimpleNamespace(initial=500, minimum=100, decay=40)
+        assert decay.linear(challenge) == int(linear_value)
+        challenge.decay = 10
+        assert decay.logarithmic(challenge) == int(logarithmic_value)

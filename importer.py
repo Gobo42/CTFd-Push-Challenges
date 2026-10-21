@@ -90,7 +90,7 @@ def _challenge_changes(challenge, spec: ChallengeSpec) -> tuple[str, ...]:
             "next",
             "scoring",
             "bonus",
-        )
+        ) + (("position",) if spec.position is not None else ())
     scalar_fields = (
         "description",
         "value",
@@ -116,6 +116,8 @@ def _challenge_changes(challenge, spec: ChallengeSpec) -> tuple[str, ...]:
         changes.append("scoring")
     if spec.bonus.mode != "preserve":
         changes.append("bonus")
+    if spec.position is not None and challenge.position != spec.position:
+        changes.append("position")
     return tuple(changes)
 
 
@@ -328,6 +330,14 @@ def render_plan(plan: ImportPlan) -> str:
         lines.append(f"WARNING [{warning.code}] {warning.source}: {warning.message}")
     for action in plan.challenges:
         lines.append(f"{action.mode.upper()}: {action.spec.name}")
+        lines.append(
+            "  Position: "
+            + (
+                str(action.spec.position)
+                if action.spec.position is not None
+                else "(preserve/default)"
+            )
+        )
         if action.spec.scoring is not None:
             scoring = action.spec.scoring
             lines.append(
@@ -475,6 +485,8 @@ def apply_plan(
             challenge.max_attempts = spec.max_attempts
             challenge.attribution = spec.attribution
             challenge.connection_info = spec.connection_info
+            if spec.position is not None:
+                challenge.position = spec.position
             challenge_rows[spec.name] = challenge
         db.session.flush()
         for action in plan.challenges:

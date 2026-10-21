@@ -356,6 +356,7 @@ def test_scoring_workbook_to_manifest_to_bonus_import(
         "Minimum Value": 20,
         "Decay": 10,
         "Bonus Mode": "Percentage",
+        "Position": 25,
     }
     for header in book["Challenges"][1]:
         if header.value in values:
@@ -374,5 +375,6 @@ def test_scoring_workbook_to_manifest_to_bonus_import(
     )
     assert result.exit_code == 0, result.output
     assert DynamicChallenge.query.one().function == "logarithmic"
+    assert DynamicChallenge.query.one().position == 25
     assert monthly.MonthlyGameBonusProgram.query.one().calculation_mode == "percentage"
     assert str(monthly.MonthlyGameBonusTier.query.one().amount) == "25.99"

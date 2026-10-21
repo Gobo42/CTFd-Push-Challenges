@@ -25,12 +25,13 @@ LEGACY_CHALLENGE_HEADERS = (
     "Attribution",
     "Connection Info",
 )
-CHALLENGE_HEADERS = LEGACY_CHALLENGE_HEADERS + (
+SCORING_CHALLENGE_HEADERS = LEGACY_CHALLENGE_HEADERS + (
     "Scoring Function",
     "Minimum Value",
     "Decay",
     "Bonus Mode",
 )
+CHALLENGE_HEADERS = SCORING_CHALLENGE_HEADERS + ("Position",)
 BONUS_HEADERS = ("Challenge", "Start Placement", "End Placement", "Amount")
 FLAG_HEADERS = ("Challenge", "Flag Type", "Content", "Matching")
 SOLUTION_HEADERS = ("Challenge", "Content", "State")
@@ -181,6 +182,12 @@ def _create_instructions(workbook: Workbook) -> None:
             "Review MANUAL ACTION REQUIRED at the end of every import. Change "
             "types manually in CTFd and rerun. Files remain manual.",
         ),
+        (
+            "Position",
+            "Optional display order: positive whole numbers sort lowest first. "
+            "0 uses CTFd automatic point ordering. Blank preserves an existing "
+            "position or leaves a new challenge at 0. Next is navigation, not order.",
+        ),
     )
     for row, values in enumerate(lines, start=1):
         sheet.cell(row, 1, values[0])
@@ -207,7 +214,7 @@ def create_workbook(path: Path, author_rows: int = 500) -> None:
         challenges.cell(row, 10, 0)
     _style_sheet(
         challenges,
-        (28, 70, 12, 20, 14, 14, 38, 28, 22, 16, 28, 42, 22, 18, 14, 18),
+        (28, 70, 12, 20, 14, 14, 38, 28, 22, 16, 28, 42, 22, 18, 14, 18, 16),
     )
     _list_validation(challenges, "=ChallengeStates", f"E2:E{author_rows + 1}")
     _list_validation(challenges, "=ChallengeTypes", f"F2:F{author_rows + 1}")
@@ -223,6 +230,9 @@ def create_workbook(path: Path, author_rows: int = 500) -> None:
         challenges, f"O2:O{author_rows + 1}", minimum=1, allow_blank=True
     )
     _list_validation(challenges, "=BonusModes", f"P2:P{author_rows + 1}")
+    _whole_number_validation(
+        challenges, f"Q2:Q{author_rows + 1}", minimum=0, allow_blank=True
+    )
     _table(challenges, "ChallengesTable", author_rows + 1, len(CHALLENGE_HEADERS))
 
     flags = workbook.create_sheet("Flags")

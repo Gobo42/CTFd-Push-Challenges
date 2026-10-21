@@ -31,6 +31,12 @@ def render_preview(result: ValidationResult) -> str:
                 f"{challenge.max_attempts}",
                 "  Tags: " + ("; ".join(challenge.tags) or "(none)"),
                 f"  Next: {challenge.next or '(none)'}",
+                "  Position: "
+                + (
+                    str(challenge.position)
+                    if challenge.position is not None
+                    else "(preserve/default)"
+                ),
                 f"  Attribution: {challenge.attribution or '(blank)'}",
                 f"  Connection Info: {challenge.connection_info or '(blank)'}",
                 f"  Solution: {_title(challenge.solution.action)}"
