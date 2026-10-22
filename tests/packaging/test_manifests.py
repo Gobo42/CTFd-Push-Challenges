@@ -8,8 +8,11 @@ WORKSPACE = Path(__file__).resolve().parents[3]
 SERVER_FILES = {
     "README.md",
     "__init__.py",
+    "admin_order.py",
+    "assets/admin-order.js",
     "cli.py",
     "importer.py",
+    "maintenance.py",
     "docs/csv-format.md",
     "docs/installation.md",
     "docs/operator-guide.md",
@@ -107,3 +110,6 @@ def test_shared_packager_builds_exact_server_and_tools_archives():
             "tools/push-challenges-template.xlsx",
         )
     )
+    assert "maintenance.py" not in tools
+    assert "admin_order.py" not in tools
+    assert "assets/admin-order.js" not in tools

@@ -36,6 +36,13 @@ directories and read the files.
 Restart CTFd after initial installation or replacement so every worker loads
 the same plugin code.
 
+The server package also includes the optional admin challenge-list ordering
+control. Its JavaScript asset and Python integration must remain readable by
+CTFd, just like the other source files. The preference is stored in each
+browser, not in the plugin directory or database. No global enable setting or
+additional Python/JavaScript dependency is required. See
+[Admin list ordering](operator-guide.md#admin-list-ordering).
+
 ## CTFd CLI launcher
 
 This deployment provides an operator-owned `ctfd-cli` command that runs Flask
@@ -77,6 +84,8 @@ Verify launcher discovery and the plugin commands:
 command -v ctfd-cli
 ctfd-cli push-challenges --help
 ctfd-cli push-challenges import --help
+ctfd-cli push-challenges list --help
+ctfd-cli push-challenges delete --help
 ```
 
 Each successful invocation prints the transient unit information and returns
@@ -133,6 +142,15 @@ The CTFd command process must be able to:
 - traverse every parent directory of the supplied manifest;
 - read the manifest file;
 - access CTFd's database using CTFd's normal configuration.
+
+For the separate delete command, the same account also needs permission to
+remove attachments from CTFd's configured upload storage. With filesystem
+uploads, that means write and traversal permission on the configured
+`UPLOAD_FOLDER` and the affected upload directories. With object storage, the
+configured storage credentials need delete permission. These are CTFd's
+existing storage paths and credentials, not a writable plugin directory.
+Do not weaken a read-only plugin installation or change the established
+`ctfd-cli` launcher for this feature.
 
 For example, create a dedicated staging directory and install the exact
 validated manifest for group `ctfd`:

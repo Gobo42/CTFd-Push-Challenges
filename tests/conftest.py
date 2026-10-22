@@ -41,6 +41,8 @@ def manifest_data(*challenges, warnings=None):
 @pytest.fixture
 def app():
     application = create_ctfd()
+    # The CTFd helper uses HTTP for setup; plugin registration belongs to startup.
+    application._got_first_request = False
     load_plugin(application)
     with application.app_context():
         yield application

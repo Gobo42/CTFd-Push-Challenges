@@ -1,7 +1,9 @@
 # Push Challenges
 
-Push Challenges provides a CLI-only CTFd plugin and independent authoring
+Push Challenges provides a CTFd plugin and independent authoring
 tools for creating or overwriting Standard and Dynamic challenges in bulk.
+The server plugin also provides separate challenge-listing and interactive
+bulk-deletion commands for administrators.
 
 Challenge authors can work in the included macro-free Excel workbook or in a
 strict CSV file. The standalone validator prints every decoded challenge and
@@ -27,13 +29,21 @@ Standard challenges use fixed values. Dynamic challenges use CTFd's native
 Linear or Logarithmic decay in individual or team installations. Optional
 first-solver bonus tiers require an updated Monthly Game plugin, which supports
 individual mode only. Blank Bonus Mode leaves existing bonus settings alone.
-The plugin has no web routes and does not create, remove, or modify attached
-files.
+The plugin adds no public pages or APIs. Its optional admin sorting control
+uses an administrator-only JavaScript asset. Imports do not create, remove,
+or modify attached files; the separate deletion command performs CTFd's normal
+cleanup.
 
 Use the workbook's optional Position column to keep related challenges in
 sequence regardless of point value. Blank preserves existing ordering; `0`
 restores CTFd's automatic point ordering. See
 [Set challenge display order](docs/workbook-authoring.md#set-challenge-display-order).
+
+On the existing admin challenge list, **Group by category and position** is
+unchecked by default. Enable it to group each category by Position; overlapping
+positions across categories are valid. The choice is remembered only in that
+browser. Turning it off restores the original CTFd order without changing IDs.
+See [Admin list ordering](docs/operator-guide.md#admin-list-ordering).
 
 ## Packages
 
@@ -56,23 +66,42 @@ Python package.
 
 ## Safety model
 
-Dry-run is the default. Exact, case-sensitive challenge names select overwrite
+Imports default to dry-run. Exact, case-sensitive challenge names select overwrite
 targets. The importer validates all references before writing, rejects circular
 `Next` chains, and commits the eligible import once. An existing challenge with
 a different type is skipped entirely, not converted. The final
 `MANUAL ACTION REQUIRED` section lists every skip, even when the command exits
 successfully. Other pre-commit failures roll back the transaction.
 
-Challenges, hints, solution records, and attachments are never deleted. Flags
+Imports never delete challenges, hints, solution records, or attachments. Flags
 and tags for imported challenges are deliberately replaced. Existing hints
 whose exact titles appear in the manifest are updated in place; other hints are
 preserved.
 
-The plugin writes no files and needs no writable directory. The CTFd service
+The plugin writes no plugin-owned files and needs no writable plugin directory.
+The CTFd service
 account only needs read access to the manifest and traversal permission on its
-parent directories.
+parent directories for imports. Deletion uses CTFd's configured upload storage
+and requires permission to remove its files.
+
+## List or delete challenges
+
+To list actual database IDs, or select challenges interactively for deletion:
+
+```bash
+ctfd-cli push-challenges list
+ctfd-cli push-challenges delete
+```
+
+The delete command accepts IDs and inclusive ranges such as `47,49,55-58`,
+previews the selection, and requires literal `yes`. It deletes serially using
+CTFd's normal handlers, including associated data and attached files. Back up
+the database and uploads first. Completed deletions cannot be rolled back as
+a batch. See [Delete challenges](docs/operator-guide.md#delete-challenges).
 
 ## Acceptance test
+
+From a source checkout, run the acceptance test:
 
 ```bash
 pytest tests/acceptance/test_workflow.py -v
@@ -82,3 +111,6 @@ This test generates a temporary workbook, exports and dry-runs its manifest,
 proves dry-run leaves the database empty, applies two linked challenges, and
 repeats an exact-name overwrite without duplicating challenges or changing the
 retained hint ID.
+
+The full `pytest` suite also requires Node.js for the admin checkbox's
+JavaScript behavior tests. Node.js is not a deployment dependency.

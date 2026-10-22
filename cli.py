@@ -1,4 +1,4 @@
-"""Flask CLI registration for challenge imports."""
+"""Flask CLI registration for challenge imports and maintenance."""
 
 from __future__ import annotations
 
@@ -9,13 +9,16 @@ import click
 from flask.cli import AppGroup
 
 from .importer import ImportPreflightError, build_plan, render_plan, render_summary
+from .maintenance import delete_challenges, list_challenges
 from .push_challenges_core.errors import ManifestValidationError
 from .push_challenges_core.manifest import load_manifest
 
 push_challenges_cli = AppGroup(
     "push-challenges",
-    help="Validate and atomically import challenge manifests.",
+    help="Import manifests, list challenges, or interactively delete challenges.",
 )
+push_challenges_cli.add_command(list_challenges)
+push_challenges_cli.add_command(delete_challenges)
 
 
 def _manifest_error(error: ManifestValidationError) -> click.ClickException:

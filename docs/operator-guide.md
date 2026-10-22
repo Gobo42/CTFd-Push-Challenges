@@ -148,9 +148,40 @@ Position is preserved unless explicitly supplied. Hint updates preserve hint IDs
 and unlock/payment history. Solution
 updates preserve the solution ID and attachment links.
 
+## Admin list ordering
+
+Open CTFd's existing **Challenges** admin list. Push Challenges adds a
+**Group by category and position** checkbox above the table. It is unchecked
+by default and does not change CTFd's normal row order until enabled.
+
+When checked, the visible rows sort by Category, then Position within that
+category. Position `0` comes last in each category; equal positions fall back
+to current point value, then ID. For example, Crypto positions `10,20,30` and
+Web positions `10,20,30,40,50` remain separate groups. A fifth Web challenge
+can appear after its fourth even when its database ID is much higher.
+
+The browser remembers the checked or unchecked state in `localStorage`, scoped
+to the site's origin and CTFd installation path. It is not a global CTFd
+setting or an account preference. Another browser starts unchecked; admins
+sharing a browser profile share its choice. Clearing browser storage resets
+it. Private browsing might not retain it after the private session closes.
+
+Unchecking restores the row order originally supplied by CTFd. Toggling moves
+existing rows without reloading, so selected challenge checkboxes, filters,
+and links remain intact. Existing column-header sorting still works; the
+remembered grouping is reapplied on the next page load if enabled. If browser
+storage is blocked, the control still works for the current page and displays
+a message that the choice cannot be remembered.
+
+This affects only the existing admin list. It does not change IDs, saved
+positions, scores, player-facing ordering, or CLI list order. No server-side
+preference or writable directory is added, and CTFd's source and templates
+remain unchanged. The control expects CTFd's standard admin challenge-table
+markup; a custom admin interface might require compatibility work.
+
 ## Transactions and failures
 
-All challenge, Dynamic scoring, bonus configuration, flag, tag, solution, hint,
+All imported challenge, Dynamic scoring, bonus configuration, flag, tag, solution, hint,
 requirement, and hierarchy changes in the eligible subset
 use one ORM transaction and one commit. Any failure before commit rolls back
 the complete import and returns nonzero. Add `--debug` only when an unexpected
@@ -159,6 +190,75 @@ exception traceback is needed.
 After commit, the command clears CTFd challenge and standings caches. A cache
 failure is printed as a post-commit warning. That warning means the database
 transaction succeeded; it must not be interpreted as a rollback.
+
+## Delete challenges
+
+Use these separate maintenance commands when replacing old challenges, not
+the workbook or import manifest. Imports remain add/overwrite-only.
+
+**Warning:** Deletion permanently removes challenges and their associated
+solves, incorrect submissions, flags, tags, hints, solutions, and attached
+files using the same registered challenge-type handlers as the CTFd web UI.
+Back up both the CTFd database and upload storage before proceeding.
+
+1. List the actual database IDs and review names, categories, types, points,
+   and visibility states:
+
+   ```bash
+   ctfd-cli push-challenges list
+   ```
+
+2. Start interactive selection:
+
+   ```bash
+   ctfd-cli push-challenges delete
+   ```
+
+   The command lists challenges and prompts for IDs. Enter a comma-separated
+   selection such as `47,49,55-58`. Ranges are inclusive. Spaces and repeated
+   IDs are allowed; each selected ID is attempted once, in ascending order.
+   Every ID in a range must exist. Malformed selections, reversed ranges,
+   nonexistent IDs, or unavailable selected challenge types abort before any
+   deletion.
+
+3. Review the selected challenges and warning. Type exact lowercase `yes` to
+   proceed. Any other answer or an end-of-input before confirmation deletes
+   nothing. There is no `--yes` bypass or automatic retry.
+
+4. Review every result and the final summary. Each success prints `DELETED:`;
+   each failure prints `FAILED:` with its ID, name, and reason. Failures are
+   repeated under `MANUAL ACTION REQUIRED` at the end. Run the list command
+   again to verify the remaining challenges before retrying failed IDs.
+
+If you already know the IDs, supply the selection directly and still review
+and confirm the preview:
+
+```bash
+ctfd-cli push-challenges delete '47,49,55-58'
+```
+
+Deletion runs **sequentially**, not as overlapping web requests. CTFd commits
+each challenge separately; file cleanup can also commit during one deletion.
+This is not an atomic batch. A later failure, interruption, or cache error
+does not undo completed work, and a failed challenge can have partially
+removed data or files. The command rolls back only uncommitted database work,
+continues after individual exceptions, and returns nonzero for deletion or
+cache-refresh failures. It attempts both challenge and standings cache clears
+after deletion attempts, even after a failure. If only cache refresh failed,
+the successful database deletions remain committed.
+
+Avoid concurrent edits or deletions while using this command. The command
+rechecks each target's ID, name, and type before deletion and reports a changed
+target as failed rather than deleting the changed record.
+
+IDs are permanent database identifiers, not list row numbers or display
+positions. The command never renumbers challenges or resets the ID counter;
+gaps are expected. Use Position to control the player-facing challenge order.
+
+This command is not a Monthly Game reset. It does not rewrite closed monthly
+snapshots or revoke standalone CTFd Awards, including first-solver bonus
+Awards. Those can remain after their original challenge is deleted. Review
+them separately if the intention is to reset all scores.
 
 ## Permissions
 
@@ -171,3 +271,5 @@ appropriate for the manifest; a dedicated parent directory commonly uses
 The command inherits database credentials and authorization from CTFd's normal
 environment. Do not place credentials or server configuration in the workbook
 or manifest.
+Deletion also needs permission to remove files from CTFd's existing upload
+storage. See [Filesystem permissions](installation.md#filesystem-permissions).

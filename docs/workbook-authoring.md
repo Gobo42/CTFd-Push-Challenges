@@ -193,6 +193,11 @@ challenges, and a custom theme's sorting rules can override native ordering.
 After import, confirm the player-facing challenge list follows the intended
 sequence.
 
+Administrators can also enable **Group by category and position** on CTFd's
+admin challenge list. That optional browser preference reuses these same
+Position values within each category. It does not require unique positions
+across categories. See [Admin list ordering](operator-guide.md#admin-list-ordering).
+
 ## Bonus Tiers
 
 Bonus tiers are optional and require a compatible Monthly Game plugin on the

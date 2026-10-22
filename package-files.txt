@@ -4,8 +4,11 @@
 
 README.md
 __init__.py
+admin_order.py
+assets/admin-order.js
 cli.py
 importer.py
+maintenance.py
 docs/csv-format.md
 docs/installation.md
 docs/operator-guide.md
