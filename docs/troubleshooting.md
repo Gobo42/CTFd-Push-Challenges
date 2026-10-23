@@ -48,6 +48,49 @@ journalctl _SYSTEMD_INVOCATION_ID=INVOCATION_ID --no-pager
 | Apply reports a post-commit cache warning | Database commit succeeded but cache invalidation failed | The output explicitly distinguishes the warning from rollback | Treat the database import as committed, correct the CTFd cache problem, and verify affected challenges before deciding whether further action is needed |
 | Paths copied from the `/opt/CTFd` example are missing | The documented Debian layout differs from this deployment | Compare launcher paths with the actual CTFd service definition and metadata | Adapt the operator-owned launcher and diagnostic paths together; do not install a second system Flask as a workaround |
 
+## Solution cleanup during challenge deletion
+
+`push-challenges delete` removes the selected challenge's solution uploads
+using CTFd's configured storage helper, then removes that solution's unlocks
+and record before calling the native challenge-type handler. This avoids
+solution-file references blocking the database's cascading challenge deletion.
+It applies to Standard and loaded Dynamic challenges. Other challenges'
+solutions, files, and unlocks remain untouched.
+
+If storage cleanup fails, the command reports that challenge's failure and
+continues with other selected IDs without calling its native challenge handler.
+File removal can already have committed before a later failure. Do not assume
+that rollback restores removed files or previously committed cleanup. Take
+database and upload backups before deletion.
+
+If a foreign-key error remains, retain the failed ID and reason and inspect
+the installed handler and remaining related records, including other plugins'
+data. Do not disable foreign-key checks. Hide/unhide are separate operations
+and never delete solutions or attachments.
+
+## Challenge visibility commands
+
+For `push-challenges hide` and `push-challenges unhide`, review the selection
+preview and final summary:
+
+- `SKIPPED:` identifies a locked or nonstandard-state challenge. Neither
+  command unlocks challenges. Use CTFd's admin interface if unlocking is
+  intentional.
+- `UNCHANGED:` means the challenge already has the requested state. If no
+  changes are needed, there is no confirmation prompt.
+- Invalid or nonexistent IDs abort the whole selection before writes. Run
+  `ctfd-cli push-challenges list` and select actual database IDs again.
+- `Visibility changes rolled back` means the state-change transaction did
+  not complete. If a challenge changed since preview, list and review the
+  selection again before retrying. Avoid simultaneous administrative edits.
+- A post-commit cache-refresh error means the state changes remain committed.
+  Correct the cache failure and verify database and player-facing visibility;
+  do not treat the nonzero status as a rollback.
+
+These commands never modify solution state. If an unhidden challenge's
+solution has unexpected visibility, inspect its separate solution settings.
+See the [visibility workflow](operator-guide.md#hide-or-unhide-challenges).
+
 ## Information to retain
 
 For an unresolved failure, retain:

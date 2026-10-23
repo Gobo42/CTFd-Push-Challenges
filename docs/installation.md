@@ -85,6 +85,8 @@ command -v ctfd-cli
 ctfd-cli push-challenges --help
 ctfd-cli push-challenges import --help
 ctfd-cli push-challenges list --help
+ctfd-cli push-challenges hide --help
+ctfd-cli push-challenges unhide --help
 ctfd-cli push-challenges delete --help
 ```
 
@@ -92,6 +94,11 @@ Each successful invocation prints the transient unit information and returns
 exit status zero. `No such command 'push-challenges'` means the CTFd
 application did not load this plugin; do not proceed to an import until command
 discovery succeeds.
+
+The hide/unhide commands change only database challenge state. They do not
+change solution state, access upload storage, or require writable plugin
+files or directories. Locked challenges are skipped. See
+[Hide or unhide challenges](operator-guide.md#hide-or-unhide-challenges).
 
 The server plugin has no separate Python requirements. Do not install the
 authoring-only `requirements-tools.txt` into CTFd unless that is independently
@@ -144,7 +151,8 @@ The CTFd command process must be able to:
 - access CTFd's database using CTFd's normal configuration.
 
 For the separate delete command, the same account also needs permission to
-remove attachments from CTFd's configured upload storage. With filesystem
+remove challenge and solution attachments from CTFd's configured upload
+storage. With filesystem
 uploads, that means write and traversal permission on the configured
 `UPLOAD_FOLDER` and the affected upload directories. With object storage, the
 configured storage credentials need delete permission. These are CTFd's

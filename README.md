@@ -2,8 +2,8 @@
 
 Push Challenges provides a CTFd plugin and independent authoring
 tools for creating or overwriting Standard and Dynamic challenges in bulk.
-The server plugin also provides separate challenge-listing and interactive
-bulk-deletion commands for administrators.
+The server plugin also provides challenge-listing and interactive bulk
+hide, unhide, and deletion commands for administrators.
 
 Challenge authors can work in the included macro-free Excel workbook or in a
 strict CSV file. The standalone validator prints every decoded challenge and
@@ -96,8 +96,28 @@ ctfd-cli push-challenges delete
 The delete command accepts IDs and inclusive ranges such as `47,49,55-58`,
 previews the selection, and requires literal `yes`. It deletes serially using
 CTFd's normal handlers, including associated data and attached files. Back up
-the database and uploads first. Completed deletions cannot be rolled back as
+the database and uploads first. Before the native handler runs, the plugin
+removes the selected challenge's solution attachments, solution unlocks, and
+solution record. Other challenges' solutions are untouched.
+Completed deletions cannot be rolled back as
 a batch. See [Delete challenges](docs/operator-guide.md#delete-challenges).
+
+## Hide or unhide challenges
+
+To change only challenge visibility, use the same ID/range syntax:
+
+```bash
+ctfd-cli push-challenges hide '47,49,55-58'
+ctfd-cli push-challenges unhide '47,49,55-58'
+```
+
+Each command previews the selection and requires exact lowercase `yes`.
+Omit the selection to list challenges and enter IDs interactively. `hide`
+sets challenge state to `hidden`; `unhide` sets it to `visible`. Locked
+challenges are skipped, and solutions keep their own visibility settings.
+No solves, flags, hints, or attachments are removed. Unlike deletion, all
+eligible visibility changes commit together. See
+[Hide or unhide challenges](docs/operator-guide.md#hide-or-unhide-challenges).
 
 ## Acceptance test
 

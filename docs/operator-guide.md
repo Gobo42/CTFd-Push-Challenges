@@ -191,14 +191,82 @@ After commit, the command clears CTFd challenge and standings caches. A cache
 failure is printed as a post-commit warning. That warning means the database
 transaction succeeded; it must not be interpreted as a rollback.
 
+## Hide or unhide challenges
+
+Use `hide` and `unhide` when you want to change only challenge visibility,
+without importing a manifest or deleting data. These commands change
+`Challenges.state`, not solution visibility or content. Challenge IDs, solves,
+submissions, flags, tags, hints, scoring configuration, and attachments remain
+untouched. A solution keeps its existing state even when you unhide its
+challenge; review that setting separately if needed.
+
+1. List the database IDs and states:
+
+   ```bash
+   ctfd-cli push-challenges list
+   ```
+
+2. Start either command without a selection to list challenges and prompt
+   for IDs:
+
+   ```bash
+   ctfd-cli push-challenges hide
+   ctfd-cli push-challenges unhide
+   ```
+
+   Run the command for the action you intend, not both. Enter comma-separated
+   IDs and inclusive ranges such as `47,49,55-58`. Spaces and duplicate IDs
+   are accepted. Every ID in a range must exist; an invalid selection aborts
+   the whole operation before writes.
+
+3. Review the preview and any `SKIPPED:` or `UNCHANGED:` lines. Locked
+   challenges are always skipped, so neither command unlocks them. Other
+   nonstandard states are also skipped with a reason. Challenges already in
+   the requested state remain unchanged.
+
+4. Type exact lowercase `yes` to apply. Any other answer or end-of-input
+   before confirmation changes nothing. If every selected challenge is
+   unchanged or skipped, the command reports that without asking for
+   confirmation. There is no `--yes` bypass.
+
+5. Check each `CHANGED:` line and the final changed, unchanged, and skipped
+   counts. Run `list` again to verify states and review the player-facing
+   challenge list.
+
+If you know the IDs, pass the selection directly; preview and confirmation
+still apply:
+
+```bash
+ctfd-cli push-challenges hide '47,49,55-58'
+ctfd-cli push-challenges unhide '47,49,55-58'
+```
+
+`hide` changes eligible visible challenges to `hidden`. `unhide` changes
+eligible hidden challenges to `visible`. There are no file writes or upload
+deletions, and these commands require no writable plugin directory.
+
+All eligible state changes use one transaction. A database failure or a
+missing or changed target after preview rolls back the entire visibility
+batch and returns nonzero. Avoid concurrent administrative edits while
+running these commands. After commit, both challenge and standings caches
+are refreshed. A cache-refresh failure returns nonzero but explicitly states
+that visibility changes remain committed; it does not mean rollback. Correct
+the cache problem and verify visibility rather than assuming nothing changed.
+Skips and unchanged selections alone are not errors and return zero.
+
 ## Delete challenges
 
 Use these separate maintenance commands when replacing old challenges, not
 the workbook or import manifest. Imports remain add/overwrite-only.
 
-**Warning:** Deletion permanently removes challenges and their associated
-solves, incorrect submissions, flags, tags, hints, solutions, and attached
-files using the same registered challenge-type handlers as the CTFd web UI.
+**Warning:** Deletion is permanent and can remove associated solves,
+incorrect submissions, flags, tags, hints, solutions, and attached files.
+After confirmation and the target identity recheck, the plugin removes the
+selected challenge's uploaded solution files through CTFd's configured storage
+provider, then its solution unlock records and solution record. It then calls
+the registered challenge-type handler for the remaining challenge cleanup.
+Other challenges' solutions and files remain untouched. See
+[Solution cleanup during challenge deletion](troubleshooting.md#solution-cleanup-during-challenge-deletion).
 Back up both the CTFd database and upload storage before proceeding.
 
 1. List the actual database IDs and review names, categories, types, points,
@@ -239,6 +307,9 @@ ctfd-cli push-challenges delete '47,49,55-58'
 
 Deletion runs **sequentially**, not as overlapping web requests. CTFd commits
 each challenge separately; file cleanup can also commit during one deletion.
+Solution-file deletion also uses a CTFd helper that commits each file removal.
+If solution cleanup fails, the native challenge handler is not run for that
+target; the command reports the failure and continues to the next selection.
 This is not an atomic batch. A later failure, interruption, or cache error
 does not undo completed work, and a failed challenge can have partially
 removed data or files. The command rolls back only uncommitted database work,

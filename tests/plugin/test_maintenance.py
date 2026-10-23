@@ -7,7 +7,9 @@ from CTFd.models import (
     Files,
     Flags,
     Hints,
+    HintUnlocks,
     Solutions,
+    SolutionUnlocks,
     Submissions,
     Tags,
     db,
@@ -208,6 +210,8 @@ def test_changed_target_is_not_deleted_after_confirmation(app, runner, monkeypat
 
     challenge = persisted_challenge("Original")
     challenge_id = challenge.id
+    solution = gen_solution(db, challenge_id=challenge_id)
+    solution_id = solution.id
     prompt = click.prompt
 
     def rename_during_confirmation(*args, **kwargs):
@@ -222,6 +226,7 @@ def test_changed_target_is_not_deleted_after_confirmation(app, runner, monkeypat
     )
     assert result.exit_code != 0
     assert Challenges.query.one().name == "Changed"
+    assert Solutions.query.one().id == solution_id
     assert "changed since preview" in result.output
 
 
@@ -245,3 +250,112 @@ def test_cache_failure_does_not_hide_committed_deletion(app, runner, monkeypatch
     assert "injected cache failure" in result.output
     assert "remain committed" in result.output
     assert get_all_challenges(admin=True) == []
+
+
+@pytest.mark.parametrize("challenge_type", ["standard", "dynamic"])
+def test_delete_removes_only_selected_solution_files_and_unlocks(
+    app, runner, tmp_path, monkeypatch, challenge_type
+):
+    from CTFd.plugins.challenges import CHALLENGE_CLASSES
+    from CTFd.plugins.dynamic_challenges import DynamicValueChallenge
+
+    if challenge_type == "dynamic":
+        monkeypatch.setitem(CHALLENGE_CLASSES, "dynamic", DynamicValueChallenge)
+        selected = DynamicChallenge(
+            name="Selected", type="dynamic", initial=100, minimum=10, decay=5
+        )
+        db.session.add(selected)
+        db.session.commit()
+    else:
+        selected = persisted_challenge("Selected")
+    selected_id = selected.id
+    kept_id = persisted_challenge("Keep").id
+    selected_solution_id = gen_solution(db, challenge_id=selected_id).id
+    kept_solution_id = gen_solution(db, challenge_id=kept_id).id
+    user_id = gen_user(db).id
+    db.session.add_all(
+        [
+            SolutionUnlocks(user_id=user_id, target=selected_solution_id),
+            SolutionUnlocks(user_id=user_id, target=kept_solution_id),
+            HintUnlocks(user_id=user_id, target=selected_solution_id),
+        ]
+    )
+    db.session.commit()
+    app.config["UPLOAD_FOLDER"] = str(tmp_path)
+    paths = []
+    for solution_id in (selected_solution_id, kept_solution_id):
+        row = upload_file(
+            file=FileStorage(stream=io.BytesIO(b"solution"), filename="solution.txt"),
+            type="solution",
+            solution_id=solution_id,
+        )
+        paths.append(tmp_path / row.location)
+
+    result = runner.invoke(
+        args=["push-challenges", "delete", str(selected_id)], input="yes\n"
+    )
+
+    assert result.exit_code == 0, result.output
+    assert Challenges.query.one().id == kept_id
+    assert Solutions.query.one().id == kept_solution_id
+    assert Files.query.one().solution_id == kept_solution_id
+    assert SolutionUnlocks.query.one().target == kept_solution_id
+    assert HintUnlocks.query.one().target == selected_solution_id
+    assert not paths[0].exists()
+    assert paths[1].read_bytes() == b"solution"
+    assert "deleted: 1; failed: 0" in result.output
+
+
+def test_solution_file_failure_preserves_failed_challenge_and_continues(
+    app, runner, tmp_path, monkeypatch
+):
+    from CTFd.utils.uploads.uploaders import FilesystemUploader
+
+    first_id = persisted_challenge("Blocked").id
+    last_id = persisted_challenge("Delete").id
+    solution_id = gen_solution(db, challenge_id=first_id).id
+    app.config["UPLOAD_FOLDER"] = str(tmp_path)
+    row = upload_file(
+        file=FileStorage(stream=io.BytesIO(b"keep"), filename="solution.txt"),
+        type="solution",
+        solution_id=solution_id,
+    )
+    path = tmp_path / row.location
+
+    def storage_failure(self, filename):
+        raise OSError("injected solution storage failure")
+
+    monkeypatch.setattr(FilesystemUploader, "delete", storage_failure)
+    result = runner.invoke(
+        args=["push-challenges", "delete", f"{first_id},{last_id}"], input="yes\n"
+    )
+    assert result.exit_code != 0
+    assert "injected solution storage failure" in result.output
+    assert "deleted: 1; failed: 1" in result.output
+    assert Challenges.query.one().id == first_id
+    assert Solutions.query.one().id == solution_id
+    assert Files.query.one().solution_id == solution_id
+    assert path.read_bytes() == b"keep"
+
+
+def test_native_failure_rolls_back_uncommitted_solution_cleanup(
+    app, runner, monkeypatch
+):
+    challenge_id = persisted_challenge("Blocked").id
+    solution_id = gen_solution(db, challenge_id=challenge_id).id
+    user_id = gen_user(db).id
+    db.session.add(SolutionUnlocks(user_id=user_id, target=solution_id))
+    db.session.commit()
+
+    def native_failure(cls, challenge):
+        raise RuntimeError("injected native failure")
+
+    monkeypatch.setattr(BaseChallenge, "delete", classmethod(native_failure))
+    result = runner.invoke(
+        args=["push-challenges", "delete", str(challenge_id)], input="yes\n"
+    )
+    assert result.exit_code != 0
+    assert "injected native failure" in result.output
+    assert Challenges.query.one().id == challenge_id
+    assert Solutions.query.one().id == solution_id
+    assert SolutionUnlocks.query.one().target == solution_id
